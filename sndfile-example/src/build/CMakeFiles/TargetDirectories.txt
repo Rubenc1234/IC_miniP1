@@ -1,5 +1,0 @@
-/home/rubencc/4ano/IC/miniP1/sndfile-example/src/build/CMakeFiles/wav_cp.dir
-/home/rubencc/4ano/IC/miniP1/sndfile-example/src/build/CMakeFiles/wav_hist.dir
-/home/rubencc/4ano/IC/miniP1/sndfile-example/src/build/CMakeFiles/wav_dct.dir
-/home/rubencc/4ano/IC/miniP1/sndfile-example/src/build/CMakeFiles/edit_cache.dir
-/home/rubencc/4ano/IC/miniP1/sndfile-example/src/build/CMakeFiles/rebuild_cache.dir
