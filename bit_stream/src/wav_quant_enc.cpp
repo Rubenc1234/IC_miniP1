@@ -23,14 +23,16 @@ int main (int argc, char *argv[]) {
     BitStream obs(outputFile_Enc, STREAM_WRITE);
     
     int orig_bits = 16; // bits originais
-    int n_bits = 1;     // bits após quantização
+    int n_bits = 8;     // bits após quantização
     
     uint16_t sample;
-    while (inputFile_Wav.read(reinterpret_cast<char*>(&sample), sizeof(sample))) {
+
+    // Lê 8 bytes apontados pelo sizeof e escreve o número de bits usados na quantização no início do arquivo
+    while (inputFile_Wav.read(reinterpret_cast<char*>(&sample), sizeof(sample))) { 
         int quant_sample = sample >> (orig_bits - n_bits); // quantização
         obs.write_n_bits(quant_sample, n_bits);
     }
-
+    
     obs.close();
     inputFile_Wav.close();
     outputFile_Enc.close();
