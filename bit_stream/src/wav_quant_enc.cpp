@@ -7,13 +7,14 @@ using namespace std;
 
 int main (int argc, char *argv[]) {	
 
-    if (argc < 3) {
-        cerr << "Usage: " << argv[0] << " <input.wav> <output.enc>" << endl;
+    if (argc < 4) {
+        cerr << "Usage: " << argv[0] << " <input.wav> <output.enc> <níveis de quantização>" << endl;
         return 1;
     }
 
-    fstream inputFile_Wav {argv[argc -2], ios::in | ios::binary};
-    fstream outputFile_Enc {argv[argc -1], ios::out | ios::binary};
+    fstream inputFile_Wav {argv[1], ios::in | ios::binary};
+    fstream outputFile_Enc {argv[2], ios::out | ios::binary};
+    int n_bits = stoi(argv[3]);
 
     if (!inputFile_Wav.is_open() || !outputFile_Enc.is_open()) {
         cerr << "Error opening files" << endl;
@@ -22,8 +23,7 @@ int main (int argc, char *argv[]) {
 
     BitStream obs(outputFile_Enc, STREAM_WRITE);
     
-    int orig_bits = 16; // bits originais
-    int n_bits = 8;     // bits após quantização
+    int orig_bits = 16; // bits originais, usados pelo PCM por amostragem. "saber em quantos bits vou reconstituir (ampliar) e salvar o som num formato PCM válido e audível."
     
     uint16_t sample;
 

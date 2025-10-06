@@ -27,6 +27,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Parse arguments
     string in_path  = argv[1];
     string out_path = argv[2];
     int n_bits = stoi(argv[3]);            // bits stored per sample in .enc
@@ -34,6 +35,8 @@ int main(int argc, char* argv[]) {
     int sample_rate = stoi(argv[5]);       // e.g. 44100
     int orig_bits = 16;
     if (argc >= 7) orig_bits = stoi(argv[6]);
+
+    // Validate parameters
 
     if (n_bits <= 0 || n_bits > 32) {
         cerr << "n_bits must be between 1 and 32\n";
@@ -101,6 +104,7 @@ int main(int argc, char* argv[]) {
 
     // fmt subchunk
     ofs.write("fmt ", 4);
+
     write_little_endian(ofs, 16, 4); // subchunk1 size PCM
     write_little_endian(ofs, audio_format, 2);
     write_little_endian(ofs, num_channels, 2);
