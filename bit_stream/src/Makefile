@@ -1,66 +1,82 @@
-all:
-	@(if [ ! -d build ]; then mkdir build; fi; cd build; cmake ..; make)
-	enc dec
-	@echo "Build complete: $(ENC) $(DEC)"
+# Makefile corrigido: usa SAMPLE_PATH e OUT_DIR e aceita comandos como:
+#   make enc sample.wav 4
+#   make dec Output_Enc_4.enc 4 2 44100
 
-clean:
-	rm -rf build ../bin
-	-rm -f $(ENC) $(DEC)
-	@echo "Cleaned."
-
-
-# Makefile - compilar e executar encoder/decoder de bitstream
 CXX := g++
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra
 
-# Sources common
 SRCS_COMMON := bit_stream.cpp byte_stream.cpp
-
-# Encoder/Decoder sources
 ENC_SRC := wav_quant_enc.cpp
 DEC_SRC := wav_quant_dec.cpp
 
-# Binaries
 ENC_BIN := wav_quant_enc
 DEC_BIN := wav_quant_dec
 
-# Default file args (match the commands you gave)
-enc_input  ?= ~/Desktop/IC_miniP1/sndfile-example/test/sample.wav
-enc_output ?= ~/Desktop/IC_miniP1/bit_stream/Wav_EncDec_Tests/Output8bit.enc
+# Caminhos fixos
+SAMPLE_PATH := /home/$(USER)/Desktop/IC_miniP1/sndfile-example/test/
+OUT_DIR     := /home/$(USER)/Desktop/IC_miniP1/bit_stream/Wav_EncDec_Tests/
 
-dec_input  	?= ~/Desktop/IC_miniP1/bit_stream/Wav_EncDec_Tests/Output8bit.enc
-dec_output 	?= ~/Desktop/IC_miniP1/bit_stream/Wav_EncDec_Tests/Sample8bit.wav
-nbits 		?= 8   # In your example you passed 16 as n_bits for the decoder
-channels    ?= 2
-rate    	?= 44100
+.PHONY: all enc dec clean help
 
-.PHONY: all enc dec run_enc run_dec run_both clean
+# catch-all rule: evita que make tente construir argumentos posicionais como targets
+%:
+	@:
 
+all: $(ENC_BIN) $(DEC_BIN)
+	@echo "Build complete."
 
-# Build encoder
-enc: $(SRCS_COMMON) $(ENC_SRC)
-	$(CXX) $(CXXFLAGS) $(ENC_SRC) $(SRCS_COMMON) -o $(ENC_BIN)
-	@echo "Built $(ENC_BIN)"
+# compile encoder
+$(ENC_BIN): $(ENC_SRC) $(SRCS_COMMON)
+	$(CXX) $(CXXFLAGS) $(ENC_SRC) $(SRCS_COMMON) -o $@
+	@echo "Built $@"
 
-# Build decoder
-dec: $(SRCS_COMMON) $(DEC_SRC)
-	$(CXX) $(CXXFLAGS) $(DEC_SRC) $(SRCS_COMMON) -o $(DEC_BIN)
-	@echo "Built $(DEC_BIN)"
+# compile decoder
+$(DEC_BIN): $(DEC_SRC) $(SRCS_COMMON)
+	$(CXX) $(CXXFLAGS) $(DEC_SRC) $(SRCS_COMMON) -o $@
+	@echo "Built $@"
 
-# Run encoder (compiles first)
-run_enc: enc
-	@echo "Running encoder: ./$(ENC_BIN) $(enc_input) $(enc_output)"
-	@./$(ENC_BIN) $(enc_input) $(enc_output)
+# --- ENCODER ---
+# Usage: make enc sample.wav 4
+enc: $(ENC_BIN)
+	@if [ "$(word 2,$(MAKECMDGOALS))" = "" ] || [ "$(word 3,$(MAKECMDGOALS))" = "" ]; then \
+		echo "Usage: make enc <input_wav_name> <n_bits>"; \
+		echo "Example: make enc sample.wav 8"; \
+		exit 1; \
+	fi; \
+	infile=$(SAMPLE_PATH)$(word 2,$(MAKECMDGOALS)); \
+	nbits=$(word 3,$(MAKECMDGOALS)); \
+	outfile=$(OUT_DIR)Output_Enc_$${nbits}.enc; \
+	mkdir -p $(OUT_DIR); \
+	echo "Running encoder: ./$(ENC_BIN) $$infile $$outfile $$nbits"; \
+	./$(ENC_BIN) "$$infile" "$$outfile" "$$nbits"; \
+	exit 0
 
-# Run decoder (compiles first)
-run_dec: dec
-	@echo "Running decoder: ./$(DEC_BIN) $(dec_input) $(dec_output) $(nbits) $(channels) $(rate)"
-	@./$(DEC_BIN) $(dec_input) $(dec_output) $(nbits) $(channels) $(rate)
+# --- DECODER ---
+# Usage: make dec Output_Enc_4.enc 4 2 44100
+dec: $(DEC_BIN)
+	@if [ "$(word 2,$(MAKECMDGOALS))" = "" ] || [ "$(word 5,$(MAKECMDGOALS))" = "" ]; then \
+		echo "Usage: make dec <enc_filename> <n_bits> <channels> <rate>"; \
+		echo "Example: make dec Output_Enc_4.enc 4 2 44100"; \
+		exit 1; \
+	fi; \
+	encfile=$(OUT_DIR)$(word 2,$(MAKECMDGOALS)); \
+	nbits=$(word 3,$(MAKECMDGOALS)); \
+	ch=$(word 4,$(MAKECMDGOALS)); \
+	rate=$(word 5,$(MAKECMDGOALS)); \
+	outfile=$(OUT_DIR)Output_Dec_$${nbits}.wav; \
+	mkdir -p $(OUT_DIR); \
+	echo "Running decoder: ./$(DEC_BIN) $$encfile $$outfile $$nbits $$ch $$rate"; \
+	./$(DEC_BIN) "$$encfile" "$$outfile" $$nbits $$ch $$rate; \
+	exit 0
 
-# Run both in sequence (encoder then decoder) - useful if you want a single pipeline
-# You can override any variable in the command line
-run_both: enc dec
-	@echo "Running encoder: ./$(ENC_BIN) $(enc_input) $(enc_output)"
-	@./$(ENC_BIN) $(enc_input) $(enc_output)
-	@echo "Running decoder: ./$(DEC_BIN) $(enc_output) $(dec_output) $(nbits) $(channels) $(rate)"
-	@./$(DEC_BIN) $(enc_output) $(dec_output) $(nbits) $(channels) $(rate)
+clean:
+	@echo "Cleaning..."; \
+	rm -f $(ENC_BIN) $(DEC_BIN) $(OUT_DIR)Output_Enc_*.enc $(OUT_DIR)Output_Dec_*.wav; \
+	@echo "Cleaned."
+
+help:
+	@echo "Examples:"; \
+	 echo "  make enc sample.wav 4"; \
+	 echo "    -> will use $(SAMPLE_PATH)sample.wav and create $(OUT_DIR)Output_Enc_4.enc"; \
+	 echo "  make dec Output_Enc_4.enc 4 2 44100"; \
+	 echo "    -> will read $(OUT_DIR)Output_Enc_4.enc and create $(OUT_DIR)Output_Dec_4.wav"
