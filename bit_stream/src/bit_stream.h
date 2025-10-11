@@ -47,7 +47,6 @@ class BitStream {
 	void write_string(const std::string& s);
 	off_t tell();
 	void close();
-	int fileSizeBytes();
 };
 
 #endif
