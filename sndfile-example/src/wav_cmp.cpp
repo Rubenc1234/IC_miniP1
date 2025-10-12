@@ -25,12 +25,12 @@ int main(int argc, char *argv[]) {
     
     SndfileHandle sfhMod { argv[argc-2] };
 	if(sfhMod.error()) {
-		cerr << "Error: invalid input file\n";
+		cerr << "Error: invalid Modinput file\n";
 		return 1;
     }
 
 	if((sfhMod.format() & SF_FORMAT_TYPEMASK) != SF_FORMAT_WAV) {
-		cerr << "Error: file is not in WAV format\n";
+		cerr << "Error: Modfile is not in WAV format\n";
 		return 1;
 	}
 
@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
     size_t channels = sfhIn.channels();
     vector<long long> sumError2(channels, 0);    // soma dos erros²
     vector<long long> signalEnergy(channels, 0); // soma dos x²
-    vector<int> maxError(channels, 0);           // erro absoluto máximo
+    vector<double> maxError(channels, 0.0);           // erro absoluto máximo
     long long totalSamples = 0;
 
 
@@ -90,13 +90,18 @@ int main(int argc, char *argv[]) {
                 short x = samplesIn[i];   // original
                 short y = samplesMod[i];  // modificado
 
-                int error = x - y;
+                double error = static_cast<double>(x) - static_cast<double>(y);
                 // canal a que o sample pertence
                 size_t ch = i % channels;
                 // sum em cada canal
                 sumError2[ch] += 1LL * error * error;           // MSE
                 signalEnergy[ch] += 1LL * x * x;                // SNR
-                maxError[ch] = max(maxError[ch], abs(error));   // E_inf
+                if (fabs(error) == 65535) {
+                    cout << "⚠️  Found max error at sample " << i
+                        << " (x=" << x << ", y=" << y << ")\n";
+                }
+
+                maxError[ch] = max(maxError[ch], fabs(error));   // E_inf
 
                 totalSamples++;
         }
@@ -127,7 +132,7 @@ int main(int argc, char *argv[]) {
     }
 
     long long sumErrAll = 0, sigAll = 0;
-    int maxAll = 0;
+    double maxAll = 0;
 
     for (size_t ch = 0; ch < channels; ++ch) {
         sumErrAll += sumError2[ch];
