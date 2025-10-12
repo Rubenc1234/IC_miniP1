@@ -96,11 +96,6 @@ int main(int argc, char *argv[]) {
                 // sum em cada canal
                 sumError2[ch] += 1LL * error * error;           // MSE
                 signalEnergy[ch] += 1LL * x * x;                // SNR
-                if (fabs(error) == 65535) {
-                    cout << "⚠️  Found max error at sample " << i
-                        << " (x=" << x << ", y=" << y << ")\n";
-                }
-
                 maxError[ch] = max(maxError[ch], fabs(error));   // E_inf
 
                 totalSamples++;
