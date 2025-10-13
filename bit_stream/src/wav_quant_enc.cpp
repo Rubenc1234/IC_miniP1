@@ -27,6 +27,10 @@ int main (int argc, char *argv[]) {
     
     uint16_t sample;
 
+    // Saltar o cabeçalho WAV padrão (44 bytes)
+    inputFile_Wav.seekg(44, ios::beg);
+
+
     // Lê 8 bytes apontados pelo sizeof e escreve o número de bits usados na quantização no início do arquivo
     while (inputFile_Wav.read(reinterpret_cast<char*>(&sample), sizeof(sample))) { 
         int quant_sample = sample >> (orig_bits - n_bits); // quantização

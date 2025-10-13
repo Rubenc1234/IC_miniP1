@@ -1,3 +1,4 @@
+// wav_quant_enc_fixed.cpp
 #include "bit_stream.h"
 #include <fstream>
 #include <iostream>
@@ -6,142 +7,148 @@
 #include <fftw3.h>
 #include <iomanip>
 #include <cstdint>
+#include <cstring>
 
 using namespace std;
 
+static uint16_t read_u16_le(ifstream &ifs) {
+    uint8_t b0,b1; ifs.read(reinterpret_cast<char*>(&b0),1); ifs.read(reinterpret_cast<char*>(&b1),1);
+    return static_cast<uint16_t>(b0 | (b1<<8));
+}
+static uint32_t read_u32_le(ifstream &ifs) {
+    uint8_t b0,b1,b2,b3; ifs.read(reinterpret_cast<char*>(&b0),1); ifs.read(reinterpret_cast<char*>(&b1),1);
+    ifs.read(reinterpret_cast<char*>(&b2),1); ifs.read(reinterpret_cast<char*>(&b3),1);
+    return static_cast<uint32_t>(b0 | (b1<<8) | (b2<<16) | (b3<<24));
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 4) {
-        cerr << "Usage: " << argv[0] << " <input.wav> <output.enc> <níveis de quantização (bits)>" << endl;
+        cerr << "Usage: " << argv[0] << " <input.wav> <output.enc> <bits> <DCT_frac>" << endl;
         return 1;
     }
 
     const size_t bs = 1024;
-    const int nChannels = 1;
-    const double dctFrac = 0.2;
+    const double dctFrac = stod(argv[4]);
     const int n_bits = stoi(argv[3]);
     const uint32_t q_levels = 1u << n_bits;
+    const size_t keep_sz = static_cast<size_t>(floor(bs * dctFrac));
 
-    // Abre ficheiros
-    fstream inputFile_Wav(argv[1], ios::in | ios::binary);
+
+    ifstream inputFile_Wav(argv[1], ios::in | ios::binary);
     fstream outputFile_Enc(argv[2], ios::out | ios::binary);
-    
+
     if (!inputFile_Wav.is_open() || !outputFile_Enc.is_open()) {
         cerr << "Error opening files" << endl;
         return 1;
     }
 
-    // Obtém tamanho do ficheiro e calcula número de frames
+    // --- HEADER ESCRITA --- Para identificar o keep_sz e bs na decodificação
+
+    uint32_t magic = 0x44435431; // "DCT1" em ASCII
+    uint16_t header_bs = static_cast<uint16_t>(bs);
+    uint16_t header_keep = static_cast<uint16_t>(keep_sz);
+
+    outputFile_Enc.write(reinterpret_cast<char*>(&magic), sizeof(magic));
+    outputFile_Enc.write(reinterpret_cast<char*>(&header_bs), sizeof(header_bs));
+    outputFile_Enc.write(reinterpret_cast<char*>(&header_keep), sizeof(header_keep));
+
+    // Lê header WAV simples (assume PCM)
+    inputFile_Wav.seekg(0, ios::beg);
+    char riff[4]; inputFile_Wav.read(riff,4);
+    if (strncmp(riff,"RIFF",4) != 0) { cerr << "Not a RIFF file\n"; return 1; }
+
+    inputFile_Wav.seekg(22, ios::beg); 
+    uint16_t numChannels = read_u16_le(inputFile_Wav); 
+    inputFile_Wav.seekg(24, ios::beg); 
+    uint32_t sampleRate = read_u32_le(inputFile_Wav); 
+    inputFile_Wav.seekg(34, ios::beg);
+    uint16_t bitsPerSample = read_u16_le(inputFile_Wav);
+
+    // assume data chunk starts at 44 (simples)
     inputFile_Wav.seekg(0, ios::end);
     uint64_t fileSize = static_cast<uint64_t>(inputFile_Wav.tellg());
-    inputFile_Wav.seekg(44, ios::beg); // salta cabeçalho WAV
+    uint64_t dataSize = fileSize - 44; 
+    inputFile_Wav.seekg(44, ios::beg);
 
+    cout << "WAV channels=" << numChannels << " sampleRate=" << sampleRate << " bitsPerSample=" << bitsPerSample << "\n";
+    cout << "num_bits=" << n_bits << " q_levels=" << q_levels << "\n";
+    cout << "dataSize = " << dataSize << " bytes\n";
+    cout << "bs = " << bs << " keep_sz = " << keep_sz << " (frac=" << dctFrac << ")\n";
+    cout << "File size = " << fileSize << " bytes\n";
 
-    uint64_t dataSize = fileSize-44;
-    uint64_t nFrames = dataSize / (nChannels * 2); // 2 bytes por amostra
+    if (bitsPerSample != 16) { cerr << "Only 16-bit PCM supported\n"; return 1; }
 
-    cout << "dataSize = " << dataSize << " bytes" << endl;
+    uint64_t nFrames = dataSize / (numChannels * 2); // F2
     cout << "nFrames = " << nFrames << endl;
-    
 
-    // Lê todas as amostras
-    vector<int16_t> samples(static_cast<size_t>(nFrames * nChannels));
+    // Ler todos os samples (assume 16 bits PCM)
+    // 1 Frame (2 Bytes por canal) = numChannels * 2 bytes
+    // 1 Sample = 2 bytes (16 bits)
+
+    vector<int16_t> samples(static_cast<size_t>(nFrames * numChannels));
     for (uint64_t f = 0; f < nFrames; ++f) {
-        int16_t s = 0;
-        // se WAV é stereo, lê 2 canais mas guarda só 1
-        inputFile_Wav.read(reinterpret_cast<char*>(&s), sizeof(int16_t)); // canal 1
-        samples[f] = s;
-
-        inputFile_Wav.seekg(2, ios::cur); // pula canal 2
+        for (uint16_t ch = 0; ch < numChannels; ++ch) {
+            int16_t s = 0;
+            inputFile_Wav.read(reinterpret_cast<char*>(&s), sizeof(int16_t));
+            samples[static_cast<size_t>(f) * numChannels + ch] = s;
+            //printf("Sample[%llu][%u] = %d\n", f, ch, s);
+        }
     }
 
-    uint64_t nBlocks = nFrames / bs;
+    // nBlocks com arredondamento para cima
+    size_t nBlocks = (nFrames + bs - 1) / bs; // F1
     cout << "nBlocks = " << nBlocks << endl;
+    if (nBlocks == 0) { cerr << "File too short\n"; return 1; }
 
-    BitStream obs(outputFile_Enc, STREAM_WRITE);
+    BitStream obs(outputFile_Enc, STREAM_WRITE); // BitStream para escrita de bits
 
-    // Buffers de trabalho para DCT
     vector<double> x(bs);
     vector<double> X(bs);
     fftw_plan plan_d = fftw_plan_r2r_1d(static_cast<int>(bs), x.data(), X.data(), FFTW_REDFT10, FFTW_ESTIMATE);
 
-    const size_t keep_sz = static_cast<size_t>(floor(bs * dctFrac));
+    cout << "keep_sz = " << keep_sz << "\n";
 
-    // Codificação bloco a bloco, todos os bits
-    for (int c = 0; c < nChannels; ++c) {
-        for (uint64_t b = 0; b < nBlocks/2 + 1; ++b) {
-            // Copia bloco do canal c
-            for (size_t k = 0; k < bs; ++k) {
-                uint64_t frameIdx = b * bs + k;
-                size_t idx = static_cast<size_t>(frameIdx) * nChannels + c;
-                x[k] = static_cast<double>(samples[idx]) / 32768.0; // normaliza -1..1
-                printf("x[%ld]=%f\n", k, x[k]); // DEBUG
-            }
+    uint64_t coeffs_written = 0; // Contador de coeficientes escritos
 
-            // DCT
-            fftw_execute(plan_d);
+    // coder: bloco a bloco com zero-padding
+    for (size_t b = 0; b < nBlocks; ++b) {
 
-            // Após a primeira execução da DCT (por exemplo, só para o primeiro bloco)
-            if (b == 0) {
-                ofstream csv("dct_coeffs.csv");
-                csv << "Index,Coefficient\n";
-                for (size_t i = 0; i < bs; ++i) {
-                    double coeff = X[i] / bs;
-                    csv << i << "," << coeff << "\n";
-                }
-                csv.close();
-                cout << "Ficheiro dct_coeffs.csv gerado com " << bs << " coeficientes." << endl;
-            }
+        // Preencher x com os samples do bloco b, canal 0, ou zeros se for padding
 
-
-
-            // Quantização e escrita no BitStream
-            for (size_t k = 0; k < keep_sz; ++k) {
-                double val = X[k] / static_cast<double>(bs); // normalização DCT
-                int q = static_cast<int>(round((val + 1.0) / 2.0 * (q_levels - 1))); // -1..1 -> 0..q_levels-1
-                q = max(0, min(q, static_cast<int>(q_levels - 1)));
-                printf("q[%lu]=%d\n", k, q); // DEBUG
-                obs.write_n_bits(static_cast<uint64_t>(q), n_bits);
+        for (size_t k = 0; k < bs; ++k) {
+            uint64_t frameIdx = b*bs + k; // índice do frame global // F3
+            if (frameIdx >= nFrames) {
+                x[k] = 0.0; // padding final
+            } else {
+                size_t idx = frameIdx*numChannels + 0; // apenas canal 0
+                x[k] = static_cast<double>(samples[idx]) / 32768.0; // normaliza para [-1.0, +1.0]
             }
         }
-    }
 
+        fftw_execute(plan_d);
+
+        // Ajuste da DCT-II para IDCT-III compatível
+
+        for (size_t k = 0; k < keep_sz; ++k) {
+            double val = X[k] / bs; // normalização
+            // Quantização uniforme em [0 .. q_levels-1]
+
+            int q = static_cast<int>(round((val + 1.0) / 2.0 * (q_levels - 1)));
+            q = max(0, min(q, static_cast<int>(q_levels - 1)));
+
+            //double fk = k * (44100.0 / static_cast<double>(bs)); // frequência aproximada
+            //printf("Block %zu Coeff %zu: freq=%.2f Hz  DCT val=%.6f Quant=%d\n", b, k, fk, val, q);
+            obs.write_n_bits(static_cast<uint64_t>(q), n_bits);
+            coeffs_written++;
+        }
+    }
 
     fftw_destroy_plan(plan_d);
     obs.close();
     inputFile_Wav.close();
     outputFile_Enc.close();
 
-    // --- Calcular tamanho esperado em bytes ---
-    size_t coef_per_block = static_cast<size_t>(floor(bs * dctFrac));
-    size_t total_coef = nBlocks * coef_per_block * nChannels; // nChannels = 1
-    size_t total_bits = total_coef * n_bits;
-    size_t total_bytes = (total_bits + 7)/8; 
-
-
-    cout << "Tamanho esperado do ficheiro .enc = " << total_bytes << " bytes" << endl;
-
-    // --- Medir tamanho real do ficheiro .enc ---
-    fstream testFile(argv[2], ios::in | ios::binary);
-    testFile.seekg(0, ios::end);
-    size_t real_size = static_cast<size_t>(testFile.tellg());
-    testFile.close();
-
-    cout << "dataSize = " << dataSize << endl;
-    cout << "nChannels = " << nChannels << endl;
-    cout << "nFrames = " << nFrames << endl;
-    cout << "nBlocks = " << nBlocks << endl;
-    cout << "bs * dctFrac = " << bs*dctFrac << endl;
-
-    cout << "Tamanho real do ficheiro .enc = " << real_size << " bytes" << endl;
-
-    // --- Comparação ---
-    if (real_size == total_bytes) {
-        cout << "OK: ficheiro codificado corretamente." << endl;
-    } else {
-        cout << "ATENÇÃO: tamanho real difere do esperado." << endl;
-    }
-
-
+    cout << "coeffs_written = " << coeffs_written << "\n";
     cout << "Encoding terminado. Ficheiro gerado: " << argv[2] << endl;
     return 0;
 }

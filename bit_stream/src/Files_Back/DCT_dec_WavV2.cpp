@@ -40,8 +40,7 @@ int main(int argc, char* argv[]) {
     int orig_bits = 16;
     if (argc >= 7) orig_bits = stoi(argv[6]);
 
-    const size_t bs = 1024;
-    const double dctFrac = 0.2;
+    const double dctFrac = 0.5;
 
     const uint64_t q_levels = (1ULL << n_bits);
     uint64_t coeffs_read = 0;
@@ -49,6 +48,30 @@ int main(int argc, char* argv[]) {
     vector<uint64_t> first_qs;
     first_qs.reserve(SHOW_N);
 
+    fstream ifs_enc { in_path, ios::in | ios::binary };
+    if (!ifs_enc.is_open()) {
+        cerr << "Error opening encoded file: " << in_path << "\n";
+        return 1;
+    }
+
+    // --- HEADER LEITURA ---
+    uint32_t magic;
+    uint16_t header_bs, header_keep;
+    
+    ifs_enc.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+    ifs_enc.read(reinterpret_cast<char*>(&header_bs), sizeof(header_bs));
+    ifs_enc.read(reinterpret_cast<char*>(&header_keep), sizeof(header_keep));
+    
+    if (magic != 0x44435431) {
+        cerr << "Formato inválido ou ficheiro corrompido (magic != DCT1)\n";
+        return 1;
+    }
+    
+    size_t bs = header_bs;
+    size_t keep_sz = header_keep;
+    
+    cout << "Header lido: bs=" << bs << " keep_sz=" << keep_sz
+         << " (frac = " << (double)keep_sz / bs << ")\n";
 
     if (channels != 1) {
         cerr << "This decoder expects mono (channels==1)\n";
@@ -64,7 +87,6 @@ int main(int argc, char* argv[]) {
 
     const uint64_t total_bits = in_size * 8ULL;
     const uint64_t total_coeffs = total_bits / static_cast<uint64_t>(n_bits);
-    size_t keep_sz = static_cast<size_t>(floor(bs * dctFrac));
     if (keep_sz < 1) keep_sz = 1;
 
     if (total_coeffs < keep_sz) {
@@ -78,12 +100,7 @@ int main(int argc, char* argv[]) {
     uint64_t numSamples = static_cast<uint64_t>(nBlocks) * bs;
 
     cout << "Inferred keep_sz=" << keep_sz << " nBlocks=" << nBlocks << " numSamples=" << numSamples << "\n";
-
-    fstream ifs_enc { in_path, ios::in | ios::binary };
-    if (!ifs_enc.is_open()) {
-        cerr << "Error opening encoded file: " << in_path << "\n";
-        return 1;
-    }
+    
     BitStream ibs(ifs_enc, STREAM_READ);
 
     ofstream ofs(out_path, ios::out | ios::binary);
@@ -144,7 +161,7 @@ int main(int argc, char* argv[]) {
 
         // Escala para int16
         for (size_t n = 0; n < bs; ++n) {
-            double sample_val = x[n] * 32768.0; // já com a escala de X[k]/bs corrigida
+            double sample_val = (x[n] / (2.0 * bs)) * 32768.0;
             if (sample_val > 32767) sample_val = 32767;
             if (sample_val < -32768) sample_val = -32768;
             int16_t out_s = static_cast<int16_t>(lround(sample_val));

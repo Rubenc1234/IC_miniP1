@@ -23,14 +23,16 @@ static uint32_t read_u32_le(ifstream &ifs) {
 
 int main(int argc, char* argv[]) {
     if (argc < 4) {
-        cerr << "Usage: " << argv[0] << " <input.wav> <output.enc> <bits>" << endl;
+        cerr << "Usage: " << argv[0] << " <input.wav> <output.enc> <bits> <DCT_frac>" << endl;
         return 1;
     }
 
     const size_t bs = 1024;
-    const double dctFrac = 0.2;
+    const double dctFrac = stod(argv[4]);
     const int n_bits = stoi(argv[3]);
     const uint32_t q_levels = 1u << n_bits;
+    const size_t keep_sz = static_cast<size_t>(floor(bs * dctFrac));
+
 
     ifstream inputFile_Wav(argv[1], ios::in | ios::binary);
     fstream outputFile_Enc(argv[2], ios::out | ios::binary);
@@ -39,6 +41,15 @@ int main(int argc, char* argv[]) {
         cerr << "Error opening files" << endl;
         return 1;
     }
+
+    // --- HEADER ESCRITA ---
+    uint32_t magic = 0x44435431; // "DCT1" em ASCII
+    uint16_t header_bs = static_cast<uint16_t>(bs);
+    uint16_t header_keep = static_cast<uint16_t>(keep_sz);
+
+    outputFile_Enc.write(reinterpret_cast<char*>(&magic), sizeof(magic));
+    outputFile_Enc.write(reinterpret_cast<char*>(&header_bs), sizeof(header_bs));
+    outputFile_Enc.write(reinterpret_cast<char*>(&header_keep), sizeof(header_keep));
 
     // Lê header WAV simples (assume PCM)
     inputFile_Wav.seekg(0, ios::beg);
@@ -86,7 +97,6 @@ int main(int argc, char* argv[]) {
     vector<double> X(bs);
     fftw_plan plan_d = fftw_plan_r2r_1d(static_cast<int>(bs), x.data(), X.data(), FFTW_REDFT10, FFTW_ESTIMATE);
 
-    const size_t keep_sz = static_cast<size_t>(floor(bs * dctFrac));
     cout << "keep_sz = " << keep_sz << "\n";
 
     uint64_t coeffs_written = 0;
@@ -104,6 +114,10 @@ int main(int argc, char* argv[]) {
         }
 
         fftw_execute(plan_d);
+
+        // Ajuste da DCT-II para IDCT-III compatível
+        X[0] /= 2.0;
+
 
         for (size_t k = 0; k < keep_sz; ++k) {
             double val = X[k] / static_cast<double>(bs);
