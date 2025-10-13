@@ -75,6 +75,8 @@ int main(int argc, char *argv[]) {
             short x = samples[i];
             int q = (x >= 0) ? ((x + step/2) / step) * step
                             : ((x - step/2) / step) * step;
+			if (q > 32767) q = 32767;
+			if (q < -32768) q = -32768;
             // converter de int para short
             samples[i] = static_cast<short>(q);
         }
