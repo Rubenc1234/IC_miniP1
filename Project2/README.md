@@ -3,8 +3,8 @@
 Este repositório contém o desenvolvimento do segundo trabalho laboratorial da unidade curricular de Informação e Codificação (IC) da Universidade de Aveiro. O projeto foca-se na manipulação de imagens com OpenCV e na implementação de codecs *lossless* de áudio e imagem usando Codificação Golomb.
 
 **Grupo:**
-* Pedro Miguel Miranda de Melo (114208)
-* [Nome Aluno 2] ([Número Mec.])
+* Pedro Miguel Miranda de Melo  (114208)
+* Rúben Cardeal Costa           (114190)
 * [Nome Aluno 3] ([Número Mec.])
 
 ---
@@ -111,13 +111,13 @@ Os executáveis encontram-se na pasta `bin/`. Execute-os a partir da raiz do pro
 **Criar Negativo:**
 
 ```bash
-./bin/image_negative img/lena.ppm out/lena_negative.png
+./bin/image_negative img/lena.ppm out/lena_negative.png view
 ```
 
 **Espelhar Horizontalmente:**
 
 ```bash
-./bin/image_mirror img/peppers.ppm out/peppers_mirror_h.png h
+./bin/image_mirror img/peppers.ppm out/peppers_mirror_h.png h view
 ```
 
 **Rodar -90 Graus:**
