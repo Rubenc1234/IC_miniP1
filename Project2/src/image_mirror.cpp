@@ -60,5 +60,7 @@ int main(int argc, char** argv) {
         cv::waitKey(0);
     }
 
+    std::cout << "Imagem espelhada salva como: " << outputFile << std::endl;
+
     return 0;
 }

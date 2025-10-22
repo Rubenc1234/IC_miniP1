@@ -43,8 +43,15 @@ int main(int argc, char** argv)
     }
 
     // Salva o resultado
-    imwrite(outputFile, singleChannel);
-    cout << "Canal " << channel << " extraído e salvo como '" << outputFile << "'\n";
+    bool success = imwrite(outputFile, singleChannel);
+
+    if (success) {
+        cout << "Canal " << channel << " extraído e salvo como '" << outputFile << "'\n";
+    } else {
+        // Se falhou, imprime uma mensagem de erro no cerr e retorna um código de erro
+        cerr << "Erro: Não foi possível guardar a imagem em '" << outputFile << "'. Verifique as permissões ou o formato do ficheiro.\n";
+        return -1; // Retorna erro
+    }
 
     return 0;
 }

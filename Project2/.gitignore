@@ -1,0 +1,12 @@
+# Executáveis
+bin/
+
+# Imagens de saída
+out/
+
+# Ficheiros objeto (se viessem a usar compilação separada)
+*.o
+
+# Ficheiros temporários de editores
+*~
+.vscode/

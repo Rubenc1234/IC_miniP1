@@ -52,5 +52,7 @@ int main(int argc, char** argv) {
         cv::waitKey(0);
     }
 
+    std::cout << "Imagem negativa salva como: " << outputFile << std::endl;
+
     return 0;
 }
