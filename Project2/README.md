@@ -13,7 +13,7 @@ Este repositório contém o desenvolvimento do segundo trabalho laboratorial da 
 
 O projeto está organizado da seguinte forma:
 
-```
+```text
 .
 ├── .gitignore          \# Ficheiros ignorados pelo Git
 ├── Makefile            \# Automatiza a compilação do código C++
@@ -91,7 +91,6 @@ cd doc/relatorio
 2. Execute o `pdflatex` (pode precisar de executar duas vezes para que as referências e o índice fiquem corretos), direcionando os ficheiros auxiliares e o PDF final para a subpasta `build/`:
 
 ```bash
-pdflatex -output-directory=build -aux-directory=build -jobname=relatorio relatorio.tex
 pdflatex -output-directory=build -aux-directory=build -jobname=relatorio relatorio.tex
 ```
 
