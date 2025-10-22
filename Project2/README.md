@@ -12,6 +12,8 @@ Este repositório contém o desenvolvimento do segundo trabalho laboratorial da 
 ## 🏗️ Estrutura do Repositório
 
 O projeto está organizado da seguinte forma:
+
+```
 .
 ├── .gitignore          \# Ficheiros ignorados pelo Git
 ├── Makefile            \# Automatiza a compilação do código C++
@@ -26,6 +28,8 @@ O projeto está organizado da seguinte forma:
 ├── img/                \# Imagens de entrada fornecidas
 ├── out/                \# Diretoria para as imagens de saída geradas (ignorada pelo git)
 └── src/                \# Código fonte C++ (.cpp, .h)
+
+```
 
 * **`src/`**: Contém todo o código-fonte C++.
 * **`bin/`**: Os programas executáveis são gerados aqui após a compilação. Esta pasta é criada automaticamente pelo `Makefile`.
