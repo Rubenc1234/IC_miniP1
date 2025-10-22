@@ -4,6 +4,8 @@ bin/
 # Imagens de saída
 out/
 
+build/
+
 # Ficheiros objeto (se viessem a usar compilação separada)
 *.o
 
