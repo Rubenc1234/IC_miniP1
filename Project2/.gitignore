@@ -4,6 +4,9 @@ bin/
 # Imagens de saída
 out/
 
+# Aúdio de saída
+wav_out/
+
 build/
 
 # Ficheiros objeto (se viessem a usar compilação separada)
