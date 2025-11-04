@@ -16,6 +16,8 @@ OUTDIR = out
 OPENCV_CFLAGS = $(shell pkg-config --cflags opencv4)
 OPENCV_LIBS = $(shell pkg-config --libs opencv4)
 
+SNDFILE_LIBS = -lsndfile
+
 # Adicionar flags do OpenCV às flags gerais
 CXXFLAGS += $(OPENCV_CFLAGS)
 LIBS = $(OPENCV_LIBS)
@@ -26,7 +28,9 @@ EXECUTABLES = $(BINDIR)/extract_channel \
               $(BINDIR)/image_mirror \
               $(BINDIR)/image_rotate \
 			  $(BINDIR)/image_intensity \
-			  $(BINDIR)/test_golomb
+			  $(BINDIR)/test_golomb \
+			  $(BINDIR)/audio_encoder \
+			  $(BINDIR)/audio_decoder
 			  
 # Alvo principal: compila todos os executáveis
 all: $(EXECUTABLES)
@@ -42,6 +46,13 @@ $(BINDIR)/%: $(SRCDIR)/%.cpp | $(BINDIR)
 # Regra específica para compilar o test_golomb, pois ele depende de dois .cpp
 $(BINDIR)/test_golomb: $(SRCDIR)/main_test_golomb.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h | $(BINDIR)
 	$(CXX) $(CXXFLAGS) $(SRCDIR)/main_test_golomb.cpp $(SRCDIR)/Golomb.cpp -o $@ $(LIBS)
+
+# Regras específicas para o codec de áudio
+$(BINDIR)/audio_encoder: $(SRCDIR)/audio_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_encoder.cpp $(SRCDIR)/Golomb.cpp -o $@ $(SNDFILE_LIBS)
+
+$(BINDIR)/audio_decoder: $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp -o $@ $(SNDFILE_LIBS)
 
 # Alvo para limpar os executáveis compilados
 clean:
