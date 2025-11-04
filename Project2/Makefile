@@ -25,7 +25,8 @@ EXECUTABLES = $(BINDIR)/extract_channel \
               $(BINDIR)/image_negative \
               $(BINDIR)/image_mirror \
               $(BINDIR)/image_rotate \
-			  $(BINDIR)/image_intensity
+			  $(BINDIR)/image_intensity \
+			  $(BINDIR)/test_golomb
 			  
 # Alvo principal: compila todos os executáveis
 all: $(EXECUTABLES)
@@ -37,6 +38,10 @@ $(BINDIR):
 # Regra genérica para compilar um .cpp de src/ para um executável em bin/
 $(BINDIR)/%: $(SRCDIR)/%.cpp | $(BINDIR)
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LIBS)
+
+# Regra específica para compilar o test_golomb, pois ele depende de dois .cpp
+$(BINDIR)/test_golomb: $(SRCDIR)/main_test_golomb.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/main_test_golomb.cpp $(SRCDIR)/Golomb.cpp -o $@ $(LIBS)
 
 # Alvo para limpar os executáveis compilados
 clean:

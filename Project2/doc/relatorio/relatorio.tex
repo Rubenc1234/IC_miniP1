@@ -318,17 +318,76 @@ A Figura~\ref{fig:intensidade} mostra os resultados para aumento e diminuição 
 % ----------------------------------------------------------------------------------
 \section{Parte II: Classe de Codificação Golomb}
 
-Esta parte focou-se na implementação de uma classe C++ para a codificação Golomb, uma técnica de codificação entrópica eficiente para fontes com distribuições geométricas ou de Laplace.
+Esta parte focou-se na implementação de uma classe C++ para a codificação Golomb, conforme solicitado no enunciado. Esta é uma técnica de codificação entrópica eficiente para fontes com distribuições geométricas. A classe foi desenhada para ser a base dos codecs \textit{lossless} das partes seguintes.
 
-\subsection{Classe \texttt{GolombCodec}} % (Assumindo este nome para a classe)
+\subsection{Princípio de Codificação Golomb}
 
-% -- Descrever aqui a classe GolombCodec --
-% - Construtor (parâmetro m)
-% - Método encode(int valor) -> devolve sequência de bits (e.g., string ou vector<bool>)
-% - Método decode(sequência de bits) -> devolve int
-% - Tratamento de negativos (Sinal+Magnitude e Interleaving)
-% - Explicação da fórmula de codificação/descodificação (quociente unário, resto binário)
-% - Como o parâmetro 'm' afeta os códigos
+A codificação Golomb é uma família de códigos que depende de um parâmetro inteiro $m > 0$. A implementação segue a teoria descrita nos documentos de apoio:
+
+\begin{enumerate}
+    \item Um inteiro não-negativo $i$ é dividido em duas partes: um quociente $q$ e um resto $r$.
+    \item As fórmulas para $q$ e $r$ são:
+        $$ q = \left\lfloor \frac{i}{m} \right\rfloor \quad \text{e} \quad r = i - qm $$ 
+    \item O quociente $q$ é codificado em código unário (uma sequência de $q$ bits '1' seguida de um bit '0').
+    \item O resto $r$ é codificado usando um código binário.
+\end{enumerate}
+
+A forma como o resto $r$ é codificado depende do valor de $m$:
+
+\paragraph{Caso 1: $m$ é uma potência de 2 (Golomb-Rice)}
+Se $m = 2^b$, o resto $r$ (que estará no intervalo $[0, m-1]$) é simplesmente codificado usando a sua representação binária com $b = \log_2(m)$ bits.
+
+\paragraph{Caso 2: $m$ não é uma potência de 2 (Código Binário Truncado)}
+Se $m$ não é uma potência de 2, a codificação do resto é otimizada usando a regra do "truncated binary code":
+\begin{enumerate}
+    \item Calcula-se $b = \lceil \log_2 m \rceil$.
+    \item Calcula-se o valor de "corte" $t = 2^b - m$.
+    \item Se $r < t$, o resto é codificado usando $b-1$ bits.
+    \item Se $r \ge t$, o resto é codificado usando $b$ bits, representando o valor $r + t$.
+\end{enumerate}
+A nossa classe deteta automaticamente se $m$ é uma potência de 2 e aplica a regra de codificação do resto apropriada (Golomb-Rice ou genérica).
+
+\subsection{Tratamento de Números Negativos}
+O enunciado pedia o suporte para números negativos usando duas estratégias distintas. Estas são selecionadas no construtor da classe.
+
+\begin{itemize}
+    \item \textbf{1. Sinal e Magnitude (\texttt{SIGN\_MAGNITUDE}):} Esta abordagem utiliza um bit de sinal extra. No nosso caso, '0' para positivo/zero e '1' para negativo. Este bit é escrito no início do \textit{codeword}. O codificador Golomb é depois aplicado ao valor absoluto (magnitude) do número.
+    
+    \item \textbf{2. Intercalamento (\texttt{INTERLEAVING}):} Esta abordagem mapeia valores positivos e negativos para inteiros não-negativos antes da codificação. A regra de mapeamento utilizada foi:
+        $$ i = \begin{cases} 2n & \text{se } n \ge 0 \\ 2|n| - 1 & \text{se } n < 0 \end{cases} $$
+    Isto gera a sequência $0 \to 0, -1 \to 1, 1 \to 2, -2 \to 3, \dots$. O descodificador simplesmente inverte este mapeamento após a descodificação Golomb.
+\end{itemize}
+
+\subsection{Interface da Classe Implementada}
+
+Foi implementada uma classe \texttt{Golomb} com a seguinte interface pública:
+
+\begin{lstlisting}[language=C++, caption={Interface C++ da classe Golomb (Golomb.h)}]
+// Enum para selecionar o modo de tratamento de negativos
+enum class SignHandling {
+    SIGN_MAGNITUDE,
+    INTERLEAVING
+};
+
+class Golomb {
+public:
+    // Construtor que recebe o parâmetro 'm' e o modo
+    Golomb(int m_param, SignHandling mode_param);
+
+    // Codifica um inteiro numa string de '0's e '1's 
+    std::string encode(int n);
+
+    // Descodifica bits de uma string, atualizando o índice 
+    int decode(const std::string& bits, size_t& index);
+
+private:
+    // Métodos privados para o mapeamento de negativos e
+    // codificação/descodificação de inteiros não-negativos.
+    // ...
+};
+\end{lstlisting}
+
+A classe foi testada com os valores de exemplo fornecidos nos documentos de apoio (como o Exemplo 5.7, para $m=5$ ) e com os testes de exemplo desenvolvidos (incluindo $m=4$ para Golomb-Rice), verificando-se a correção de ambas as estratégias de tratamento de negativos e da lógica de codificação genérica e Golomb-Rice.
 
 
 % ----------------------------------------------------------------------------------
