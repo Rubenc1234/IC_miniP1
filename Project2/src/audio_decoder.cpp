@@ -24,53 +24,103 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    int sampleRate, numChannels, m;
+    int sampleRate, numChannels, m1, m2;
     sf_count_t numFrames;
 
     in.read((char*)&sampleRate, sizeof(int));
     in.read((char*)&numChannels, sizeof(int));
     in.read((char*)&numFrames, sizeof(sf_count_t));
-    in.read((char*)&m, sizeof(int));
+    
 
-    // Ler bits, que lê tudo com um iterador
+    in.read((char*)&m1, sizeof(int));
+    if (numChannels == 2) {
+        in.read((char*)&m2, sizeof(int));
+    }
+    
+    cout << "Descodificação (Canais=" << numChannels << "). M1=" << m1 << ", M2=" << m2 << endl;
+
+
+    // Ler bits (Lógica original mantida)
     vector<char> fileBytes((istreambuf_iterator<char>(in)), {});
     in.close();
 
     string bitstream;
-    // cada byte tem 8 bits
     bitstream.reserve(fileBytes.size() * 8);
     for (unsigned char b : fileBytes) {
         for (int i = 7; i >= 0; --i)
-            // operação inversa (Byte para bits)
-            // desloca À direita, dps pega o bit menos significativo
             bitstream += ((b >> i) & 1) ? '1' : '0';
     }
 
-    // Descodificação  
-    Golomb g(m, SignHandling::INTERLEAVING);
+    // --- Descodificação e Reconstrução ---
+    Golomb g1(m1, SignHandling::INTERLEAVING);
+    Golomb g2(numChannels == 2 ? m2 : 1, SignHandling::INTERLEAVING);
+    
     vector<int16_t> samples(numFrames * numChannels);
-
     size_t index = 0;
-    for (int i = 0; i < numFrames * numChannels; i++) {
-        int prediction = 0;
-        if (i >= numChannels)
-            prediction = samples[i - numChannels];
 
-        int residual = g.decode(bitstream, index);
-        int reconstructed = prediction + residual;
+    if (numChannels == 1) {
+        int16_t prediction = 0;
+        for (sf_count_t i = 0; i < numFrames; i++) {
+            int residual = g1.decode(bitstream, index);
+            int reconstructed = prediction + residual;
 
-        // limitar ao intervalo de 16 bits
-        if (reconstructed > 32767) reconstructed = 32767;
-        if (reconstructed < -32768) reconstructed = -32768;
+            // Limitar ao intervalo de 16 bits
+            if (reconstructed > 32767) reconstructed = 32767;
+            if (reconstructed < -32768) reconstructed = -32768;
 
-        samples[i] = static_cast<int16_t>(reconstructed);
+            samples[i] = static_cast<int16_t>(reconstructed);
+            prediction = samples[i]; // O preditor simples
+        }
+    } else if (numChannels == 2) {
+        int16_t mid_pred = 0;
+        int16_t side_pred = 0;
+        for (sf_count_t i = 0; i < numFrames; i++) {
+            // Descodifica os resíduos de MID e SIDE
+            int res_mid = g1.decode(bitstream, index);
+            int res_side = g2.decode(bitstream, index);
+
+            // Reconstrói os valores de MID e SIDE
+            int16_t mid = static_cast<int16_t>(mid_pred + res_mid);
+            int16_t side = static_cast<int16_t>(side_pred + res_side);
+
+            // Reverte a transformação MID/SIDE para L/R
+            // L = (2*mid + side) / 2 = mid + side/2
+            // R = (2*mid - side) / 2 = mid - side/2
+            // Como usamos side = L - R, a reconstrução é:
+            // L = (mid + mid + L - R) / 2 ... não.
+            // A reconstrução de mid=(L+R)/2 e side=L-R é:
+            int L = mid + (side + (side & 1)) / 2; // (side + 1) / 2 para side ímpar
+            int R = mid - (side / 2);
+
+            // CORREÇÃO: Lógica de reconstrução lossless para L-R
+            // L = mid + side/2 (arredondado para cima)
+            // R = L - side 
+            // Usando int: L = mid + (side + 1) / 2; R = L - side;
+            // Ou L = (2*mid + side) / 2; R = (2*mid - side) / 2;
+            
+            // Reconstrução para (L+R)/2 e (L-R)
+            // L = (mid*2 + side) / 2
+            // R = (mid*2 - side) / 2
+            // Para ser 100% lossless (mid=(L+R)/2, side=L-R)
+            int l_recon = mid + (side / 2) + (side % 2 != 0 ? 1 : 0); // L = mid + side/2 (arredondar para cima)
+            int r_recon = l_recon - side;
+
+            // Limitar ao intervalo de 16 bits
+            if (l_recon > 32767) l_recon = 32767; if (l_recon < -32768) l_recon = -32768;
+            if (r_recon > 32767) r_recon = 32767; if (r_recon < -32768) r_recon = -32768;
+
+            samples[i * 2] = static_cast<int16_t>(l_recon);
+            samples[i * 2 + 1] = static_cast<int16_t>(r_recon);
+
+            mid_pred = mid;
+            side_pred = side;
+        }
     }
 
-    // Escrever WAV  
+    // Escrever WAV (Lógica original mantida)
     SF_INFO sfInfoOut;
     sfInfoOut.samplerate = sampleRate;
     sfInfoOut.channels = numChannels;
-    // combina formatos
     sfInfoOut.format = SF_FORMAT_WAV | SF_FORMAT_PCM_16;
 
     SNDFILE* outFile = sf_open(outputFile, SFM_WRITE, &sfInfoOut);
