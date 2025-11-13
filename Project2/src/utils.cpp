@@ -6,6 +6,31 @@
 
 using namespace std;
 
+
+int calculate_optimal_m(const vector<int>& residuals) {
+    if (residuals.empty()) return 1;
+
+    double sum = 0.0;
+    for (int res : residuals) {
+        // Usamos o mapeamento interleaving (2*n ou 2*|n|-1) para
+        // calcular a média dos valores 'i' não-negativos que o Golomb irá codificar.
+        sum += (res >= 0) ? (2.0 * res) : (2.0 * abs(res) - 1.0);
+    }
+    double mean = sum / residuals.size();
+
+    if (mean < 1.0) return 1; // Evita m=0 se houver silêncio
+
+    // A teoria diz que m ≈ Média * ln(2)
+    // forçar 'm' a ser uma potência de 2 (Golomb-Rice)
+    int m = static_cast<int>(round(mean * log(2)));
+
+
+    if (m <= 0) m = 1;
+    
+    return m;
+}
+
+
 int predict(int a, int b, int c) {
     if (c >= max(a, b)) return min(a, b);
     else if (c <= min(a, b)) return max(a, b);
