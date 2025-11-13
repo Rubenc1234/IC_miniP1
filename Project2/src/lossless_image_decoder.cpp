@@ -74,8 +74,7 @@ int main(int argc, char** argv) {
             int c = (x > 0 && y > 0) ? img.data[y-1][x-1] : 0;
             int pred = predict(a,b,c);
 
-            int mapped = golomb.decode(bitBuffer, bitIndex);
-            int residual = unsignedToResidual(mapped);
+            int residual = golomb.decode(bitBuffer, bitIndex);
             int val = pred + residual;
             if (val < 0) val = 0;
             if (val > img.maxval) val = img.maxval;

@@ -12,14 +12,6 @@ int predict(int a, int b, int c) {
     else return a + b - c;
 }
 
-int residualToUnsigned(int r) {
-    return (r >= 0) ? (2 * r) : (-2 * r - 1);
-}
-
-int unsignedToResidual(int n) {
-    return ( (n & 1) == 0 ) ? (n / 2) : ( - ( (n + 1) / 2 ) );
-}
-
 bool readPPMtoGray(const string& filename, Image& img) {
 
     // abrir ficheiro

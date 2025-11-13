@@ -30,7 +30,9 @@ EXECUTABLES = $(BINDIR)/extract_channel \
 			  $(BINDIR)/image_intensity \
 			  $(BINDIR)/test_golomb \
 			  $(BINDIR)/audio_encoder \
-			  $(BINDIR)/audio_decoder
+			  $(BINDIR)/audio_decoder \
+			  $(BINDIR)/image_encoder \
+			  $(BINDIR)/image_decoder
 			  
 # Alvo principal: compila todos os executáveis
 all: $(EXECUTABLES)
@@ -53,6 +55,13 @@ $(BINDIR)/audio_encoder: $(SRCDIR)/audio_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCD
 
 $(BINDIR)/audio_decoder: $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h | $(BINDIR)
 	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp -o $@ $(SNDFILE_LIBS)
+
+# Regras específicas para o codec de imagem
+$(BINDIR)/image_encoder: $(SRCDIR)/lossless_image_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/lossless_image_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp  $(SRCDIR)/utils.h -o $@ $(LIBS)
+
+$(BINDIR)/image_decoder: $(SRCDIR)/lossless_image_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/lossless_image_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp  $(SRCDIR)/utils.h -o $@ $(LIBS)
 
 # Alvo para limpar os executáveis compilados
 clean:

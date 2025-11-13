@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
     string outArg = argv[2];
     int m = stoi(argv[3]);
 
-    string outputDir = "../out/";
+    string outputDir = "out/";
     fs::create_directories(outputDir);
 
     // extrai nome base
@@ -26,6 +26,7 @@ int main(int argc, char** argv) {
     string filename = (pos != string::npos) ? outArg.substr(pos + 1) : outArg;
     if (filename.find(".gol") == string::npos) filename += ".gol";
     string outputPath = outputDir + filename;
+    cout << "Output path: " << outputPath << "\n";
 
     // ler e converter imagem para grayscale
     Image img;
@@ -61,9 +62,8 @@ int main(int argc, char** argv) {
             int c = (x > 0 && y > 0) ? img.data[y-1][x-1] : 0;
             int pred = predict(a,b,c);
             int residual = img.data[y][x] - pred;
-            int mapped = residualToUnsigned(residual);
 
-            string code = golomb.encode(mapped);
+            string code = golomb.encode(residual);
             bitBuffer += code;
 
             // escrever bytes completos
