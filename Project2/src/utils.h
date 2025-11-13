@@ -23,5 +23,6 @@ bool writeGrayAsPPM(const string& filename, const Image& img);
 int predict(int a, int b, int c);
 int residualToUnsigned(int r);
 int unsignedToResidual(int n);
+int calculate_optimal_m(const vector<int>& residuals);
 
 #endif // UTILS_H
