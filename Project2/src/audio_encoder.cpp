@@ -5,6 +5,8 @@
 #include <fstream>
 #include <numeric> // Para std::accumulate
 #include <cmath>   // Para std::abs e std::log2
+#include "utils.h"
+
 
 // make bin/audio_encoder
 // ./bin/audio_encoder wav/sample.wav wav_out/compressed.bin
@@ -12,41 +14,6 @@
 
 using namespace std;
 
-// NOVO: Função para calcular o 'm' ótimo para um conjunto de resíduos
-// O 'm' ótimo está relacionado com a média dos valores absolutos.
-int calculate_optimal_m(const vector<int>& residuals) {
-    if (residuals.empty()) return 1;
-
-    double sum = 0.0;
-    for (int res : residuals) {
-        // Usamos o mapeamento interleaving (2*n ou 2*|n|-1) para
-        // calcular a média dos valores 'i' não-negativos que o Golomb irá codificar.
-        sum += (res >= 0) ? (2.0 * res) : (2.0 * abs(res) - 1.0);
-    }
-    double mean = sum / residuals.size();
-
-    if (mean < 1.0) return 1; // Evita m=0 se houver silêncio
-
-    // A teoria diz que m ≈ Média / ln(2) ou Média * 1.44
-    // Uma aproximação mais simples (Golomb-Rice) é encontrar a potência de 2 mais próxima.
-    int m = static_cast<int>(round(mean * 0.693)); // Média * ln(2)
-    
-    // Para simplificar, podemos apenas usar a média arredondada,
-    // ou forçar 'm' a ser uma potência de 2 (Golomb-Rice)
-    m = static_cast<int>(round(mean));
-
-    if (m <= 0) m = 1;
-    
-    // Otimização: Achar a potência de 2 mais próxima da média (Golomb-Rice é eficiente)
-    // Se a média for 0, log2 dá -infinito.
-    if (mean == 0) return 1;
-    int k = static_cast<int>(round(log2(mean)));
-    m = 1 << k; // m = 2^k
-
-    if (m <= 0) m = 1;
-
-    return m;
-}
 
 int main(int argc, char* argv[]) {
     // CORREÇÃO: Removido o argumento 'm' da linha de comando
