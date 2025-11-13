@@ -51,7 +51,7 @@ $(BINDIR)/test_golomb: $(SRCDIR)/main_test_golomb.cpp $(SRCDIR)/Golomb.cpp $(SRC
 
 # Regras específicas para o codec de áudio
 $(BINDIR)/audio_encoder: $(SRCDIR)/audio_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h | $(BINDIR)
-	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_encoder.cpp $(SRCDIR)/Golomb.cpp -o $@ $(SNDFILE_LIBS)
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp -o $@ $(SNDFILE_LIBS)
 
 $(BINDIR)/audio_decoder: $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h | $(BINDIR)
 	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp -o $@ $(SNDFILE_LIBS)

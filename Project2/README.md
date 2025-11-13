@@ -5,11 +5,11 @@ Este repositório contém o desenvolvimento do segundo trabalho laboratorial da 
 **Grupo:**
 * Pedro Miguel Miranda de Melo  (114208)
 * Rúben Cardeal Costa           (114190)
-* [Nome Aluno 3] ([Número Mec.])
+* Hugo Marques Dias             (114142)
 
 ---
 
-## 🏗️ Estrutura do Repositório
+## Estrutura do Repositório
 
 O projeto está organizado da seguinte forma:
 
@@ -42,7 +42,7 @@ O projeto está organizado da seguinte forma:
 
 ---
 
-## ⚙️ Dependências
+## Dependências
 
 Para compilar e executar este projeto, necessita de:
 
@@ -59,7 +59,7 @@ sudo apt update
 sudo apt install build-essential make pkg-config libopencv-dev texlive-full
 ```
 
-## 🛠️ Compilação do Código C++
+## Compilação do Código C++
 
 A compilação dos programas C++ é gerida pelo Makefile fornecido.
 
@@ -78,7 +78,7 @@ Para limpar os ficheiros compilados, execute:
 make clean
 ```
 
-## 📄 Compilação do Relatório LaTeX
+## Compilação do Relatório LaTeX
 
 O relatório (`relatorio.tex`) encontra-se na pasta `doc/relatorio/`. Para compilar o PDF:
 
@@ -96,7 +96,7 @@ pdflatex -output-directory=build -aux-directory=build -jobname=relatorio relator
 
 O ficheiro PDF final (`relatorio.pdf`) estará disponível em `doc/relatorio/build/`.
 
-## ▶️ Execução dos Programas
+## Execução dos Programas
 
 Os executáveis encontram-se na pasta `bin/`. Execute-os a partir da raiz do projeto.
 
@@ -130,4 +130,15 @@ Os executáveis encontram-se na pasta `bin/`. Execute-os a partir da raiz do pro
 
 ```bash
 ./bin/image_intensity img/tulips.ppm out/tulips_brighter_30.png 30
+```
+
+**Testar Golomb**
+```bash
+./bin/test_golomb
+```
+
+**Encoder e decoder de audio**
+```bash
+./bin/audio_encoder wav/sample.wav wav_out/compressed.bin
+./bin/audio_decoder wav_out/compressed.bin wav_out/output.wav
 ```

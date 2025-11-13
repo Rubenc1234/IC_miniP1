@@ -89,8 +89,8 @@ int main(int argc, char* argv[]) {
             // Como usamos side = L - R, a reconstrução é:
             // L = (mid + mid + L - R) / 2 ... não.
             // A reconstrução de mid=(L+R)/2 e side=L-R é:
-            int L = mid + (side + (side & 1)) / 2; // (side + 1) / 2 para side ímpar
-            int R = mid - (side / 2);
+            /*int L = mid + (side + (side & 1)) / 2; // (side + 1) / 2 para side ímpar
+            int R = mid - (side / 2);*/
 
             // CORREÇÃO: Lógica de reconstrução lossless para L-R
             // L = mid + side/2 (arredondado para cima)
@@ -106,8 +106,12 @@ int main(int argc, char* argv[]) {
             int r_recon = l_recon - side;
 
             // Limitar ao intervalo de 16 bits
-            if (l_recon > 32767) l_recon = 32767; if (l_recon < -32768) l_recon = -32768;
-            if (r_recon > 32767) r_recon = 32767; if (r_recon < -32768) r_recon = -32768;
+            if (l_recon > 32767) l_recon = 32767;
+            if (l_recon < -32768) l_recon = -32768;
+
+            if (r_recon > 32767) r_recon = 32767;
+            if (r_recon < -32768) r_recon = -32768;
+
 
             samples[i * 2] = static_cast<int16_t>(l_recon);
             samples[i * 2 + 1] = static_cast<int16_t>(r_recon);
