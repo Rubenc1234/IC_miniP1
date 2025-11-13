@@ -9,14 +9,34 @@ using namespace std;
 namespace fs = std::filesystem;
 
 int main(int argc, char** argv) {
-    if (argc < 4) {
-        cerr << "Uso: " << argv[0] << " <imagem.ppm> <saida.gol> <m>\n";
+    if (argc < 3) {
+        cerr << "Uso: " << argv[0] << " <imagem.ppm> <saida.gol> [m]\n";
+        cerr << "  Se [m] não for fornecido, calcula m óptimo por bloco.\n";
         return 1;
     }
 
     string input = argv[1];
     string outArg = argv[2];
-    int m = stoi(argv[3]);
+    int m = -1;  // -1 significa: calcular m óptimo
+    
+    if (argc >= 4) {
+        try {
+            m = stoi(argv[3]);
+            if (m <= 0) {
+                cerr << "Erro: m deve ser um inteiro positivo.\n";
+                return 1;
+            }
+            cerr << "Modo: usando m fixo = " << m << "\n";
+        } catch (const invalid_argument& e) {
+            cerr << "Erro: parâmetro 'm' deve ser um inteiro válido.\n";
+            return 1;
+        } catch (const out_of_range& e) {
+            cerr << "Erro: parâmetro 'm' fora do intervalo.\n";
+            return 1;
+        }
+    } else {
+        cerr << "Modo: calculando m óptimo por bloco.\n";
+    }
 
     string outputDir = "out/";
     fs::create_directories(outputDir);
@@ -50,32 +70,48 @@ int main(int argc, char** argv) {
     int channels = 1;
     fout.write(reinterpret_cast<const char*>(&channels), sizeof(channels));
 
-    // codificador Golomb
-    Golomb golomb(m, SignHandling::INTERLEAVING);
     string bitBuffer;
 
-    // percorre, calcula preditor e codifica resíduos
-    for (int y = 0; y < img.height; ++y) {
-        for (int x = 0; x < img.width; ++x) {
-            int a = (x > 0) ? img.data[y][x-1] : 0;
-            int b = (y > 0) ? img.data[y-1][x] : 0;
-            int c = (x > 0 && y > 0) ? img.data[y-1][x-1] : 0;
-            int pred = predict(a,b,c);
-            int residual = img.data[y][x] - pred;
-
-            string code = golomb.encode(residual);
-            bitBuffer += code;
-
-            // escrever bytes completos
-            while (bitBuffer.size() >= 8) {
-                unsigned char byte = 0;
-                for (int i = 0; i < 8; ++i) {
-                    byte = (byte << 1) | (bitBuffer[i] - '0');
+    const int blockSize = 16; // 16x16 pixels
+    for (int by = 0; by < img.height; by += blockSize) {
+        for (int bx = 0; bx < img.width; bx += blockSize) {
+            // 1. Recolher resíduos do bloco
+            vector<int> blockResiduals;
+            for (int y = by; y < min(by + blockSize, img.height); ++y) {
+                for (int x = bx; x < min(bx + blockSize, img.width); ++x) {
+                    int a = (x > 0) ? img.data[y][x-1] : 0;
+                    int b = (y > 0) ? img.data[y-1][x] : 0;
+                    int c = (x > 0 && y > 0) ? img.data[y-1][x-1] : 0;
+                    int pred = predict(a, b, c);
+                    int residual = img.data[y][x] - pred;
+                    blockResiduals.push_back(residual);
                 }
-                fout.write(reinterpret_cast<const char*>(&byte), 1);
-                bitBuffer.erase(0,8);
+            }
+            
+            // 2. Determinar m a usar: fixo ou óptimo
+            int mToUse = m;  // usa m fixo se foi fornecido (m != -1)
+            if (m == -1) {
+                // Se m não foi fornecido, calcula óptimo para este bloco
+                mToUse = calculate_optimal_m(blockResiduals);
+                printf("Bloco (%d,%d): m óptimo = %d\n", bx / blockSize, by / blockSize, mToUse);
+            }
+            
+            // 3. Codificar o bloco com esse m
+            Golomb golomb(mToUse, SignHandling::INTERLEAVING);
+            for (int res : blockResiduals) {
+                bitBuffer += golomb.encode(res);
             }
         }
+    }
+
+    // escrever bytes completos
+    while (bitBuffer.size() >= 8) {
+        unsigned char byte = 0;
+        for (int i = 0; i < 8; ++i) {
+            byte = (byte << 1) | (bitBuffer[i] - '0');
+        }
+        fout.write(reinterpret_cast<const char*>(&byte), 1);
+        bitBuffer.erase(0,8);
     }
 
     // padding dos bits remanescentes (à direita com zeros)
