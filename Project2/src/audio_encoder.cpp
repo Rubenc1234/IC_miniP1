@@ -10,13 +10,11 @@
 
 // make bin/audio_encoder
 // ./bin/audio_encoder wav/sample.wav wav_out/compressed.bin
-// (Nota: 'm' já não é um argumento)
 
 using namespace std;
 
 
 int main(int argc, char* argv[]) {
-    // CORREÇÃO: Removido o argumento 'm' da linha de comando
     if (argc != 3) {
         cerr << "Uso: " << argv[0] << " <input.wav> <output.bin>\n";
         return 1;
@@ -41,9 +39,7 @@ int main(int argc, char* argv[]) {
     sf_read_short(inFile, samples.data(), numSamples);
     sf_close(inFile);
 
-    // --- NOVO: Análise de Duas Passagens (Passo 1: Calcular Resíduos) ---
-    // Precisamos de calcular os resíduos primeiro para encontrar o 'm' ótimo.
-
+   // --- Calculo dos Resíduos ---
     vector<int> residuals_ch1;
     vector<int> residuals_ch2; // Usado apenas para estéreo
 
@@ -58,10 +54,10 @@ int main(int argc, char* argv[]) {
         for (sf_count_t i = 0; i < numFrames; i++) {
             int residual = samples[i] - prediction;
             residuals_ch1.push_back(residual);
-            prediction = samples[i]; // O preditor simples
+            prediction = samples[i];
         }
     } else if (numChannels == 2) {
-        // --- NOVO: Processamento ESTÉREO (MID/SIDE) ---
+        // --- Processamento ESTÉREO (MID/SIDE) ---
         int16_t mid_pred = 0;
         int16_t side_pred = 0;
         for (sf_count_t i = 0; i < numFrames; i++) {
@@ -70,7 +66,7 @@ int main(int argc, char* argv[]) {
 
             // Conversão MID/SIDE (Predição Inter-Canal)
             int16_t mid = (L + R) / 2;
-            int16_t side = L - R; // Usar L-R é mais simples que (L-R)/2 para reconstrução 100% lossless
+            int16_t side = L - R;
 
             // Predição Temporal
             int res_mid = mid - mid_pred;
@@ -87,20 +83,20 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // --- NOVO: Calcular 'm' ótimo e criar Codificadores ---
+    // --- Calcular 'm' ótimo e criar Codificadores ---
     int m1 = calculate_optimal_m(residuals_ch1);
     int m2 = (numChannels == 2) ? calculate_optimal_m(residuals_ch2) : 0;
     
     Golomb g1(m1, SignHandling::INTERLEAVING);
     Golomb g2(m2 > 0 ? m2 : 1, SignHandling::INTERLEAVING); // g2 só é usada se for estéreo
 
-    // --- NOVO: Gravar cabeçalho ---
+    // --- Gravar cabeçalho ---
     ofstream out(outputFile, ios::binary);
     out.write((char*)&sfInfo.samplerate, sizeof(int));
     out.write((char*)&numChannels, sizeof(int));
     out.write((char*)&numFrames, sizeof(sf_count_t));
     
-    // CORREÇÃO: Escreve o(s) 'm' adaptativo(s) no cabeçalho
+    // Escreve o(s) 'm' adaptativo(s) no cabeçalho
     out.write((char*)&m1, sizeof(int));
     if (numChannels == 2) {
         out.write((char*)&m2, sizeof(int));
@@ -109,9 +105,9 @@ int main(int argc, char* argv[]) {
     cout << "Codificação (Canais=" << numChannels << "). M1=" << m1 << ", M2=" << m2 << endl;
 
 
-    // --- NOVO: Análise de Duas Passagens (Passo 2: Codificar Resíduos) ---
+    // --- Codificar Resíduos ---
     string bitstream;
-    bitstream.reserve(numSamples * (m1 > 16 ? m1/2 : 8)); // Estimativa de reserva
+    bitstream.reserve(numSamples * (m1 > 16 ? m1/2 : 8));
 
     if (numChannels == 1) {
         for (int res : residuals_ch1) {
@@ -125,7 +121,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Escrever bits como bytes (Lógica original mantida, pois está correta)
+    // Escrever bits como bytes
     uint8_t currentByte = 0;
     int bitCount = 0;
     for (char bit : bitstream) {

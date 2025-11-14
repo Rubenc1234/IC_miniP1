@@ -24,5 +24,7 @@ int predict(int a, int b, int c);
 int residualToUnsigned(int r);
 int unsignedToResidual(int n);
 int calculate_optimal_m(const vector<int>& residuals);
+string int_to_binary_string(unsigned int n, int num_bits);
+unsigned int binary_string_to_int(const string& bits, size_t& index, int num_bits);
 
 #endif // UTILS_H

@@ -7,6 +7,31 @@
 using namespace std;
 
 
+string int_to_binary_string(unsigned int n, int num_bits) {
+    if (num_bits == 0) return "";
+    string binary_str;
+    binary_str.reserve(num_bits);
+    for (int i = num_bits - 1; i >= 0; --i) {
+        binary_str += ((n >> i) & 1) ? '1' : '0';
+    }
+    return binary_str;
+}
+
+
+unsigned int binary_string_to_int(const string& bits, size_t& index, int num_bits) {
+    if (index + num_bits > bits.length()) {
+        throw std::runtime_error("Erro de descodificação: Fim inesperado (a ler m do bloco).");
+    }
+    if (num_bits == 0) return 0;
+    
+    unsigned int value = 0;
+    for (int i = 0; i < num_bits; ++i) {
+        value = (value << 1) | ((bits[index + i] == '1') ? 1 : 0);
+    }
+    index += num_bits; // Avança o índice principal
+    return value;
+}
+
 int calculate_optimal_m(const vector<int>& residuals) {
     if (residuals.empty()) return 1;
 

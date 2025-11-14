@@ -83,26 +83,7 @@ int main(int argc, char* argv[]) {
             int16_t mid = static_cast<int16_t>(mid_pred + res_mid);
             int16_t side = static_cast<int16_t>(side_pred + res_side);
 
-            // Reverte a transformação MID/SIDE para L/R
-            // L = (2*mid + side) / 2 = mid + side/2
-            // R = (2*mid - side) / 2 = mid - side/2
-            // Como usamos side = L - R, a reconstrução é:
-            // L = (mid + mid + L - R) / 2 ... não.
-            // A reconstrução de mid=(L+R)/2 e side=L-R é:
-            /*int L = mid + (side + (side & 1)) / 2; // (side + 1) / 2 para side ímpar
-            int R = mid - (side / 2);*/
-
-            // CORREÇÃO: Lógica de reconstrução lossless para L-R
-            // L = mid + side/2 (arredondado para cima)
-            // R = L - side 
-            // Usando int: L = mid + (side + 1) / 2; R = L - side;
-            // Ou L = (2*mid + side) / 2; R = (2*mid - side) / 2;
-            
-            // Reconstrução para (L+R)/2 e (L-R)
-            // L = (mid*2 + side) / 2
-            // R = (mid*2 - side) / 2
-            // Para ser 100% lossless (mid=(L+R)/2, side=L-R)
-            int l_recon = mid + (side / 2) + (side % 2 != 0 ? 1 : 0); // L = mid + side/2 (arredondar para cima)
+            int l_recon = mid + (side + 1) / 2;
             int r_recon = l_recon - side;
 
             // Limitar ao intervalo de 16 bits
