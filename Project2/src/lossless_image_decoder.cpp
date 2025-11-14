@@ -9,6 +9,9 @@
 using namespace std;
 namespace fs = std::filesystem;
 
+// make bin/lossless_image_decoder
+// ./bin/image_decoder out/compressed.gol out/decompressed.ppm
+
 int main(int argc, char** argv) {
     if (argc < 3) {
         cerr << "Uso: " << argv[0] << " <entrada.gol> <saida.ppm>\n";

@@ -10,6 +10,9 @@
 using namespace std;
 namespace fs = std::filesystem;
 
+// make bin/lossless_image_encoder
+// ./bin/image_encoder img/airplane.ppm out/compressed.gol
+
 int main(int argc, char** argv) {
     if (argc != 3) {
         cerr << "Uso: " << argv[0] << " <imagem.ppm> <saida.gol>\n";

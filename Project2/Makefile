@@ -53,8 +53,8 @@ $(BINDIR)/test_golomb: $(SRCDIR)/main_test_golomb.cpp $(SRCDIR)/Golomb.cpp $(SRC
 $(BINDIR)/audio_encoder: $(SRCDIR)/audio_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h | $(BINDIR)
 	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp -o $@ $(SNDFILE_LIBS)
 
-$(BINDIR)/audio_decoder: $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h | $(BINDIR)
-	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp -o $@ $(SNDFILE_LIBS)
+$(BINDIR)/audio_decoder: $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h -o $@ $(SNDFILE_LIBS)
 
 # Regras específicas para o codec de imagem
 $(BINDIR)/image_encoder: $(SRCDIR)/lossless_image_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h | $(BINDIR)

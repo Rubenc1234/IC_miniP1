@@ -91,7 +91,7 @@ cd doc/relatorio
 2. Execute o `pdflatex` (pode precisar de executar duas vezes para que as referências e o índice fiquem corretos), direcionando os ficheiros auxiliares e o PDF final para a subpasta `build/`:
 
 ```bash
-pdflatex -output-directory=build -aux-directory=build -jobname=relatorio relatorio.tex
+pdflatex -output-directory=build -aux-directory=build -jobname=relatorio relatorio.tex & mv build/relatorio.pdf relatorio.pdf
 ```
 
 O ficheiro PDF final (`relatorio.pdf`) estará disponível em `doc/relatorio/build/`.
