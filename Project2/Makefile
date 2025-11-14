@@ -57,11 +57,11 @@ $(BINDIR)/audio_decoder: $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCD
 	$(CXX) $(CXXFLAGS) $(SRCDIR)/audio_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h -o $@ $(SNDFILE_LIBS)
 
 # Regras específicas para o codec de imagem
-$(BINDIR)/image_encoder: $(SRCDIR)/lossless_image_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h | $(BINDIR)
-	$(CXX) $(CXXFLAGS) $(SRCDIR)/lossless_image_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp  $(SRCDIR)/utils.h -o $@ $(LIBS)
+$(BINDIR)/image_encoder: $(SRCDIR)/image_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/image_encoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp  $(SRCDIR)/utils.h -o $@ $(LIBS)
 
-$(BINDIR)/image_decoder: $(SRCDIR)/lossless_image_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h | $(BINDIR)
-	$(CXX) $(CXXFLAGS) $(SRCDIR)/lossless_image_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp  $(SRCDIR)/utils.h -o $@ $(LIBS)
+$(BINDIR)/image_decoder: $(SRCDIR)/image_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/Golomb.h $(SRCDIR)/utils.cpp $(SRCDIR)/utils.h | $(BINDIR)
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/image_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCDIR)/utils.cpp  $(SRCDIR)/utils.h -o $@ $(LIBS)
 
 # Alvo para limpar os executáveis compilados
 clean:

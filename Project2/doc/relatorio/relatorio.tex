@@ -426,7 +426,7 @@ O codificador (\texttt{audio\_encoder.cpp}) processa o áudio em blocos, calcula
 A chave para a compressão é "sintonizar" o codificador Golomb com os dados. A função \texttt{calculate\_optimal\_m} é usada para encontrar o \texttt{m} ideal para cada bloco de resíduos.
 
 \paragraph{Teoria vs. Prática}
-A teoria (como a da Figura \ref{fig:teoria_m}) define \texttt{m} em função de parâmetros estatísticos teóricos ($\alpha$ ou $p=P(x=0)$). Na prática, não conhecemos estes parâmetros, mas podemos medi-los através da média dos nossos dados (os resíduos).
+A teoria define \texttt{m} em função de parâmetros estatísticos teóricos ($\alpha$ ou $p=P(x=0)$). Na prática, não conhecemos estes parâmetros, mas podemos medi-los através da média dos nossos dados (os resíduos).
 
 Os nossos resíduos com sinal (e.g., -50, 100, 2) seguem uma distribuição de Laplace. A nossa classe \texttt{Golomb} usa o mapeamento \texttt{INTERLEAVING} para os converter em inteiros não-negativos $i$. A teoria de compressão (usada em \textit{standards} como o JPEG-LS) demonstra que o \texttt{m} ótimo pode ser estimado diretamente da média ($\mu$) destes valores $i$ mapeados, usando a aproximação:
 $$ m \approx \mu \times \ln(2) $$
@@ -478,70 +478,200 @@ sample.wav & 2.1 MB & 1.7 MB &  1.24 : 1 \\
 A compressão alcançada, mesmo com um \texttt{m} adaptativo, é muito modesta (1.24:1). Este resultado não indica um erro no codec Golomb, mas sim a ineficácia do preditor de 1ª ordem ($P[n] = x[n-1]$). Um sinal de áudio é complexo, e assumir que a próxima amostra é igual à anterior é uma previsão fraca que gera resíduos médios muito grandes. O \texttt{m} ótimo calculado é, por isso, muito elevado, e a codificação Golomb não é eficiente para comprimir números grandes. O ganho de compressão é marginal, pois o preditor falha em descorrelacionar eficazmente o sinal.
 
 
+
+
+% ----------------------------------------------------------------------------------
+% SECÇÃO 4: PARTE III - CODEC ÁUDIO LOSSLESS
+% ----------------------------------------------------------------------------------
+\section{Parte III: Codec Áudio Lossless}
+
+Nesta secção, foi desenvolvido um codec de áudio sem perdas (\textit{lossless}), conforme solicitado na Parte III do enunciado. O objetivo é comprimir ficheiros de áudio (mono e estéreo) aplicando a codificação Golomb (implementada na Parte II) sobre os resíduos de um preditor.
+
+Para maximizar a compressão, o codec implementa uma arquitetura de \texttt{m} adaptativo por bloco, similar à do codec de imagem.
+
+\subsection{Codificador \texttt{audio\_encoder}}
+
+\subsubsection{Algoritmo de Codificação}
+O codificador (\texttt{audio\_encoder.cpp}) processa o áudio em blocos, calculando o \texttt{m} ótimo para cada um e escrevendo-o no \textit{bitstream}.
+
+\begin{enumerate}
+    \item \textbf{Leitura e Cabeçalho:} O ficheiro WAV é lido para a memória. O codificador escreve um cabeçalho no ficheiro de saída contendo os metadados (\texttt{samplerate}, \texttt{numChannels}, \texttt{numFrames}).
+    
+    \item \textbf{Processamento por Blocos:} O áudio é processado em blocos (\texttt{blockSize = 4096} tramas). Para cada bloco:
+    \begin{itemize}
+        \item \textbf{Passagem 1 (do Bloco):} É feita uma passagem interna no bloco para calcular todos os resíduos.
+            \begin{itemize}
+                \item \textbf{Estéreo (MID/SIDE):} Se \texttt{numChannels == 2}, é aplicada a transformação \textit{lossless} (MID = $\lfloor(L+R)/2\rfloor$, SIDE = $L-R$).
+                \item \textbf{Predição (Ordem 1):} É aplicado um preditor temporal de 1ª ordem ($P[n] = x[n-1]$) a cada canal (Mono, ou MID e SIDE). O estado do preditor (e.g., \texttt{mono\_pred}) é mantido entre os blocos.
+                \item Os resíduos ($e = x - P$) são guardados em vetores temporários.
+            \end{itemize}
+        \item \textbf{Cálculo de \texttt{m} Ótimo:} A função \texttt{calculate\_optimal\_m} é chamada para os vetores de resíduos.
+        \item \textbf{Escrita de \texttt{m}:} O(s) \texttt{m}'s ótimos (16 bits cada) são escritos no \textit{bitstream}.
+        \item \textbf{Passagem 2 (do Bloco):} Os resíduos são codificados com os \texttt{m}'s ótimos e escritos no \textit{bitstream}.
+    \end{itemize}
+    \item \textbf{Empacotamento de Bits:} A \textit{string} de bits total é empacotada em bytes e escrita no ficheiro de saída.
+\end{enumerate}
+
+\subsubsection{Determinação Adaptativa do Parâmetro \texttt{m}}
+A chave para a compressão é "sintonizar" o codificador Golomb com os dados. A função \texttt{calculate\_optimal\_m} é usada para encontrar o \texttt{m} ideal para cada bloco de resíduos.
+
+\paragraph{Teoria vs. Prática}
+A teoria define \texttt{m} em função de parâmetros estatísticos teóricos ($\alpha$ ou $p=P(x=0)$). Na prática, não conhecemos estes parâmetros, mas podemos medi-los através da média dos nossos dados (os resíduos).
+
+A nossa classe \texttt{Golomb} usa o mapeamento \texttt{INTERLEAVING} para converter os resíduos com sinal em inteiros não-negativos $i$. A teoria de compressão (usada em \textit{standards} como o JPEG-LS) demonstra que o \texttt{m} ótimo pode ser estimado diretamente da média ($\mu$) destes valores $i$ mapeados, usando a aproximação:
+$$ m \approx \mu \times \ln(2) $$
+
+\paragraph{Implementação}
+A nossa função \texttt{calculate\_optimal\_m} implementa esta lógica:
+\begin{enumerate}
+    \item Calcula a média (`mean`) dos resíduos após o mapeamento \texttt{INTERLEAVING}.
+    \item Estima \texttt{m} usando a fórmula: `m = round(mean * log(2))`.
+\end{enumerate}
+Isto garante que cada bloco usa o codificador Golomb mais eficiente para os seus resíduos específicos.
+
+\subsubsection{Sintaxe e Exemplos}
+O codificador calcula \texttt{m} automaticamente, não sendo um argumento.
+\begin{lstlisting}[language=bash, caption=Sintaxe de Uso do audio\_encoder]
+./bin/audio_encoder <ficheiro_entrada.wav> <ficheiro_saida.bin>
+\end{lstlisting}
+\begin{lstlisting}[language=bash, caption=Exemplo de Codificação de Áudio]
+./bin/audio_encoder wav/sample.wav wav_out/sample_encoded.glob
+\end{lstlisting}
+
+\subsection{Descodificador \texttt{audio\_decoder}}
+O descodificador (\texttt{audio\_decoder.cpp}) inverte o processo, lendo o \texttt{m} de cada bloco.
+
+\begin{lstlisting}[language=bash, caption=Sintaxe de Uso do audio\_decoder]
+./bin/audio_decoder <ficheiro_entrada.bin> <ficheiro_saida.wav>
+\end{lstlisting}
+\begin{lstlisting}[language=bash, caption=Exemplo de Descodificação de Áudio]
+./bin/audio_decoder wav_out/sample_encoded.glob wav_out/sample_decoded.wav
+\end{lstlisting}
+
+% --- SECÇÃO ALTERADA ---
+\subsubsection{Garantia de Reconstrução Lossless}
+Duas decisões de implementação são cruciais para garantir a reconstrução 100\% \textit{lossless} do sinal:
+\begin{itemize}
+    \item \textbf{Cálculos em 32-bit:} Todos os cálculos de predição e resíduos (incluindo MID/SIDE) são feitos com \texttt{int32\_t}. Isto previne qualquer \textit{integer overflow} que poderia ocorrer ao subtrair amostras de 16 bits (e.g., $30000 - (-30000)$), garantindo a integridade dos resíduos.
+    
+    \item \textbf{Transformação MID/SIDE Reversível:} A transformação estéreo é implementada de forma a ser 100\% reversível com aritmética inteira. O codificador usa \texttt{side = L - R} e \texttt{mid = R + (side >> 1)}. O descodificador inverte-a com \texttt{R = mid - (side >> 1)} e \texttt{L = R + side}, garantindo que não há erros de arredondamento.
+\end{itemize}
+% --- FIM DA SECÇÃO ALTERADA ---
+
+\subsection{Análise de Desempenho e Compressão}
+O codec foi testado com dois ficheiros de áudio estéreo.
+
+\begin{table}[htbp]
+\centering
+\caption{Análise de Compressão do Codec Áudio (Preditor Ordem 1, M Adaptativo)}
+\label{tab:compressao_audio}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Ficheiro} & \textbf{Original} & \textbf{Comprimido} & \textbf{Taxa de Compressão} \\ \midrule
+sample.wav & 2.1 MB & 1.6 MB &  1.31 : 1 \\
+sample2.wav & 4.8 MB & 3.1 MB &  1.55 : 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Tempos de Execução do Codec Áudio (ms)}
+\label{tab:tempos_audio}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Ficheiro} & \textbf{Codificação (ms)} & \textbf{Descodificação (ms)} \\ \midrule
+sample.wav & 105.80 ms & 57.91 ms \\
+sample2.wav & 216.66 ms & 113.14 ms \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Análise dos Resultados}
+Os testes de verificação com \texttt{wav\_cmp} (demonstrados nos testes executados) confirmaram que o codec é 100\% lossless, com `MSE = 0.0` e `SNR = inf`. A compressão alcançada (1.3:1 a 1.5:1) é modesta. Isto deve-se inteiramente à simplicidade do preditor de 1ª ordem ($P[n] = x[n-1]$). Este preditor é fraco para sinais de áudio complexos, gerando resíduos médios elevados. Consequentemente, o \texttt{m} ótimo calculado por bloco é alto, e a codificação Golomb não consegue ser muito eficiente.
+
+
+
+% ----------------------------------------------------------------------------------
+% SECÇÃO 5: PARTE IV - CODEC IMAGEM LOSSLESS (GRAYSCALE)
+% ----------------------------------------------------------------------------------
 \section{Parte IV: Codec Imagem Lossless (Grayscale)}
 
 Aplicando a mesma arquitetura de \texttt{m} adaptativo por bloco, foi desenvolvido um codec \textit{lossless} para imagens em escala de cinza, conforme a Parte IV do enunciado.
 
-\subsection{Codificador \texttt{lossless\_image\_encoder}}
+\subsection{Arquitetura do Codec (\texttt{image\_encoder} / \texttt{image\_decoder})}
 
 \subsubsection{Algoritmo de Codificação}
-O codificador (\texttt{lossless\_image\_encoder.cpp}) implementa uma lógica adaptativa por blocos de 16x16.
+O codificador (\texttt{image\_encoder.cpp}) implementa uma lógica adaptativa por blocos de 16x16.
 
 \begin{enumerate}
     \item \textbf{Leitura e Conversão:} A imagem de entrada (PPM) é lida e convertida para escala de cinza usando a função \texttt{readPPMtoGray}.
-    \item \textbf{Escrita do Cabeçalho:} Um "magic number" (\texttt{"GOL1"}) é escrito, seguido das dimensões da imagem. Nenhum \texttt{m} global é guardado.
+    \item \textbf{Escrita do Cabeçalho:} Um "magic number" (\texttt{"GOL1"}) é escrito, seguido das dimensões da imagem e \texttt{maxval}.
     \item \textbf{Processamento por Blocos (16x16):} Para cada bloco:
     \begin{itemize}
-        \item \textbf{Passagem 1 (Análise):} O codificador calcula os resíduos de predição para o bloco. É usado o preditor MED (Median Edge-Detection), que estima o píxel atual $P(x,y)$ com base nos vizinhos Oeste ($a$), Norte ($b$) e Noroeste ($c$). Os resíduos ($e = \text{píxel} - \text{predição}$) são guardados num vetor temporário.
-        \item \textbf{Cálculo de \texttt{m}:} O \texttt{m} ótimo para os resíduos do bloco é calculado com \texttt{calculate\_optimal\_m}, tal como explicado na Secção 4.1.2.
+        \item \textbf{Passagem 1 (Análise):} O codificador calcula os resíduos de predição para o bloco. É usado o preditor **MED (Median Edge-Detection)**, que estima o píxel atual $P(x,y)$ com base nos vizinhos Oeste ($a$), Norte ($b$) e Noroeste ($c$):
+        $$
+        P(x,y) = \begin{cases} 
+        \min(a, b) & \text{se } c \ge \max(a, b) \\
+        \max(a, b) & \text{se } c \le \min(a, b) \\
+        a + b - c & \text{caso contrário}
+        \end{cases}
+        $$
+        \item \textbf{Cálculo de \texttt{m}:} O \texttt{m} ótimo para os resíduos do bloco é calculado com \texttt{calculate\_optimal\_m}.
         \item \textbf{Escrita de \texttt{m}:} O \texttt{m} ótimo (16 bits) é escrito no \textit{bitstream} do bloco.
         \item \textbf{Passagem 2 (Codificação):} Os resíduos do bloco são codificados com \texttt{Golomb(m\_otimo, INTERLEAVING)} e escritos no \textit{bitstream}.
     \end{itemize}
-    \item \textbf{Empacotamento de Bits:} O \textit{bitstream} completo é empacotado em bytes e escrito no ficheiro.
 \end{enumerate}
 
-\subsubsection{Sintaxe e Exemplos}
-O codificador calcula \texttt{m} automaticamente, não sendo um argumento.
-\begin{lstlisting}[language=bash, caption=Sintaxe de Uso do lossless\_image\_encoder]
-./bin/lossless_image_encoder <imagem_entrada.ppm> <ficheiro_saida.gol>
-\end{lstlisting}
-\begin{lstlisting}[language=bash, caption=Exemplo de Codificação de Imagem]
-./bin/lossless_image_encoder img/airplane.ppm out/airplane_compressed.gol
-\end{lstlisting}
+\subsubsection{Algoritmo de Descodificação}
+O descodificador (\texttt{image\_decoder.cpp}) inverte o processo.
 
-\subsection{Descodificador \texttt{lossless\_image\_decoder}}
-O descodificador (\texttt{lossless\_image\_decoder.cpp}) inverte o processo, lendo o \texttt{m} de cada bloco.
-
-\begin{lstlisting}[language=bash, caption=Sintaxe de Uso do lossless\_image\_decoder]
-./bin/lossless_image_decoder <ficheiro_entrada.gol> <imagem_saida.ppm>
-\end{lstlisting}
-\begin{lstlisting}[language=bash, caption=Exemplo de Descodificação de Imagem]
-./bin/lossless_image_decoder out/airplane_compressed.gol out/airplane_restaurada.ppm
-\end{lstlisting}
-
+\begin{enumerate}
+    \item \textbf{Processamento por Blocos:} Itera pela imagem na mesma ordem de blocos.
+    \item \textbf{Leitura de \texttt{m}:} No início de cada bloco, lê 16 bits do \textit{bitstream} para obter o \texttt{m} específico desse bloco.
+    \item \textbf{Reconstrução:} Itera pelos píxeis do bloco. Calcula o valor de predição $P(x,y)$ usando o mesmo preditor MED sobre os píxeis \textbf{já reconstruídos}.
+    \item Descodifica o resíduo $e$ e reconstrói o píxel $\text{píxel} = P(x,y) + e$.
+\end{enumerate}
 
 \subsection{Análise de Desempenho e Compressão}
 
-A eficácia do codec foi testada com a imagem \texttt{airplane.ppm} (786.4 kB) e comparada com \textit{standards} de compressão \textit{lossless}.
+A eficácia do codec foi testada com três imagens de teste.
 
 \begin{table}[htbp]
 \centering
-\caption{Análise de Compressão do Codec de Imagem (vs. Standard)}
+\caption{Análise de Compressão do Codec de Imagem}
 \label{tab:compressao_imagem}
 \begin{tabular}{@{}lrrr@{}}
 \toprule
-\textbf{Codec} & \textbf{Original} & \textbf{Comprimido} & \textbf{Taxa de Compressão} \\ \midrule
-\textbf{Codec Golomb-MED (O nosso)} & 786.4 kB & \textbf{132.7 kB} & \textbf{5.93 : 1} \\
-PNG (Compressão Máxima) & 786.4 kB & 495.2 kB & 1.59 : 1 \\
-FLIF (Lossless) & 786.4 kB & 129.5 kB & 6.07 : 1 \\
+\textbf{Imagem} & \textbf{Original (PPM)} & \textbf{Comprimido (GOL)} & \textbf{Taxa de Compressão} \\ \midrule
+airplane.ppm & 769 kB & 130 kB & \textbf{5.92 : 1} \\
+arial.ppm & 1.1 MB & 262 kB & \textbf{4.20 : 1} \\
+bike3.ppm & 2.1 MB & 423 kB & \textbf{4.96 : 1} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Tempos de Execução do Codec de Imagem}
+\label{tab:tempos_imagem}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+\textbf{Imagem} & \textbf{Codificação (s)} & \textbf{Descodificação (ms)} \\ \midrule
+airplane.ppm & 1.05 s & 24.12 ms \\
+arial.ppm & 4.73 s & 34.86 ms \\
+bike3.ppm & 11.42 s & 60.16 ms \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsubsection{Análise dos Resultados}
-Os resultados são notavelmente positivos. O nosso codec \textit{lossless} (Taxa 5.93:1) supera largamente o \textit{standard} PNG (1.59:1) e atinge um desempenho muito próximo de codecs modernos como o FLIF.
+Os resultados demonstram uma eficácia excecional do codec de imagem, com taxas de compressão a rondar 5:1 ou 6:1.
 
-A razão para esta compressão excecional, especialmente quando comparada com a compressão modesta do nosso codec de áudio, reside inteiramente na eficácia do preditor MED (Median Edge-Detection). Um sinal de imagem 2D tem uma correlação espacial muito elevada, e o preditor MED é extremamente eficaz a explorar essa correlação. As previsões são tão precisas que os resíduos gerados são maioritariamente nulos ou muito pequenos, permitindo que o \texttt{calculate\_optimal\_m} escolha um \texttt{m} muito baixo (e.g., \texttt{m=1}), para o qual a codificação Golomb é extremamente eficiente.
+\begin{itemize}
+    \item \textbf{Eficácia do Preditor MED:} O sucesso deve-se principalmente ao preditor não-linear MED. Ao contrário do preditor linear simples do áudio, o MED adapta-se às arestas da imagem, gerando resíduos extremamente pequenos (muitas vezes zero) em áreas uniformes.
+    \item \textbf{Assimetria de Tempo:} Observa-se uma grande assimetria nos tempos de execução (Tabela~\ref{tab:tempos_imagem}). A descodificação é extremamente rápida (milissegundos) porque é uma operação direta. A codificação é mais lenta (segundos) devido à necessidade de processar cada bloco duas vezes: uma para calcular estatísticas e o \texttt{m} ótimo, e outra para codificar.
+\end{itemize}
 
 % ----------------------------------------------------------------------------------
 % SECÇÃO 6: CONCLUSÕES

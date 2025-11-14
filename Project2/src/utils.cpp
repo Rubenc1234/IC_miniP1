@@ -6,7 +6,7 @@
 
 using namespace std;
 
-
+// Função que converte um inteiro para uma string binária com um número específico de bits
 string int_to_binary_string(unsigned int n, int num_bits) {
     if (num_bits == 0) return "";
     string binary_str;
@@ -17,7 +17,7 @@ string int_to_binary_string(unsigned int n, int num_bits) {
     return binary_str;
 }
 
-
+// Função que converte uma string binária para um inteiro, lendo um número específico de bits a partir de um índice
 unsigned int binary_string_to_int(const string& bits, size_t& index, int num_bits) {
     if (index + num_bits > bits.length()) {
         throw std::runtime_error("Erro de descodificação: Fim inesperado (a ler m do bloco).");
@@ -28,25 +28,23 @@ unsigned int binary_string_to_int(const string& bits, size_t& index, int num_bit
     for (int i = 0; i < num_bits; ++i) {
         value = (value << 1) | ((bits[index + i] == '1') ? 1 : 0);
     }
-    index += num_bits; // Avança o índice principal
+    index += num_bits; 
     return value;
 }
 
+// Função que calcula o valor ótimo de m para codificação Golomb baseado nos resíduos
 int calculate_optimal_m(const vector<int>& residuals) {
     if (residuals.empty()) return 1;
 
     double sum = 0.0;
     for (int res : residuals) {
-        // Usamos o mapeamento interleaving (2*n ou 2*|n|-1) para
-        // calcular a média dos valores 'i' não-negativos que o Golomb irá codificar.
         sum += (res >= 0) ? (2.0 * res) : (2.0 * abs(res) - 1.0);
     }
     double mean = sum / residuals.size();
 
-    if (mean < 1.0) return 1; // Evita m=0 se houver silêncio
+    if (mean < 1.0) return 1; 
 
-    // A teoria diz que m ≈ Média * ln(2)
-    // forçar 'm' a ser uma potência de 2 (Golomb-Rice)
+
     int m = static_cast<int>(round(mean * log(2)));
 
 
@@ -55,13 +53,14 @@ int calculate_optimal_m(const vector<int>& residuals) {
     return m;
 }
 
-
+// Função que realiza predição linear simples para compressão de imagem
 int predict(int a, int b, int c) {
     if (c >= max(a, b)) return min(a, b);
     else if (c <= min(a, b)) return max(a, b);
     else return a + b - c;
 }
 
+// Função que lê uma imagem PPM colorida e converte para grayscale
 bool readPPMtoGray(const string& filename, Image& img) {
 
     // abrir ficheiro
@@ -84,7 +83,7 @@ bool readPPMtoGray(const string& filename, Image& img) {
 
     // ler largura, altura, maxval
     in >> img.width >> img.height >> img.maxval;
-    in.get(); // consumir whitespace depois do cabeçalho
+    in.get(); 
 
     if (img.width <= 0 || img.height <= 0) {    
         cerr << "Erro: dimensões inválidas no ficheiro PPM\n";
@@ -95,20 +94,20 @@ bool readPPMtoGray(const string& filename, Image& img) {
         img.maxval = 255;
     }
 
-    img.channels = 1; // grayscale
-    img.data.assign(img.height, vector<int>(img.width, 0)); // alocar espaço
+    img.channels = 1; 
+    img.data.assign(img.height, vector<int>(img.width, 0)); 
 
     for (int y = 0; y < img.height; ++y) {
         for (int x = 0; x < img.width; ++x) {
-            unsigned char rgb[3]; // ler RGB
-            in.read(reinterpret_cast<char*>(rgb), 3); // cada canal 1 byte
+            unsigned char rgb[3]; 
+            in.read(reinterpret_cast<char*>(rgb), 3); 
             if (!in) {
                 cerr << "Erro: leitura PPM truncada\n";
                 return false;
             }
-            // converter para luminância (BT.601-like): Y = 0.299 R + 0.587 G + 0.114 B
+
             double yval = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
-            int iv = static_cast<int>(round(yval)); // arredondar
+            int iv = static_cast<int>(round(yval)); 
 
             // garantir dentro de [0, maxval]
             if (iv < 0) iv = 0; 
@@ -123,6 +122,7 @@ bool readPPMtoGray(const string& filename, Image& img) {
     return true;
 }
 
+// Função que escreve uma imagem grayscale como PPM colorida (replicando o canal)
 bool writeGrayAsPPM(const string& filename, const Image& img) {
     if (img.width <= 0 || img.height <= 0 || img.data.empty()) {
         cerr << "Erro: imagem inválida para escrita\n";
@@ -135,10 +135,9 @@ bool writeGrayAsPPM(const string& filename, const Image& img) {
         return false;
     }
 
-    // escrever cabeçalho PPM
+
     out << "P6\n" << img.width << " " << img.height << "\n" << img.maxval << "\n";
 
-    // escrever dados da imagem
     for (int y = 0; y < img.height; ++y) {
         for (int x = 0; x < img.width; ++x) {
             unsigned char v = static_cast<unsigned char>(img.data[y][x]);

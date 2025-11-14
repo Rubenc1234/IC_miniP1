@@ -1,3 +1,4 @@
+// Inclusão de bibliotecas para entrada/saída, manipulação de áudio e codificação Golomb
 #include <iostream>
 #include <vector>
 #include <sndfile.h>
@@ -9,7 +10,7 @@
 
 using namespace std;
 
-// Função principal para descodificar ficheiro binário comprimido em WAV
+// Função principal que descodifica áudio comprimido para WAV
 int main(int argc, char* argv[]) {
     // Verificação dos argumentos de linha de comando
     if (argc < 3) {
@@ -20,7 +21,7 @@ int main(int argc, char* argv[]) {
     const char* inputFile = argv[1];
     const char* outputFile = argv[2];
 
-    // Leitura dos metadados do ficheiro binário de entrada
+    // Abertura do ficheiro de entrada comprimido
     ifstream in(inputFile, ios::binary);
     if (!in.is_open()) {
         cerr << "Erro ao abrir ficheiro: " << inputFile << endl;
@@ -30,13 +31,14 @@ int main(int argc, char* argv[]) {
     int sampleRate, numChannels;
     sf_count_t numFrames;
 
+    // Leitura do cabeçalho com metadados do áudio
     in.read((char*)&sampleRate, sizeof(int));
     in.read((char*)&numChannels, sizeof(int));
     in.read((char*)&numFrames, sizeof(sf_count_t));
     
     cout << "Descodificação (Canais=" << numChannels << ", m adaptativo por bloco)\n";
 
-    // Conversão do resto do ficheiro em bitstream
+    // Leitura do bitstream do ficheiro
     vector<char> fileBytes((istreambuf_iterator<char>(in)), {});
     in.close();
 
@@ -46,25 +48,22 @@ int main(int argc, char* argv[]) {
         for (int i = 7; i >= 0; --i)
             bitstream += ((b >> i) & 1) ? '1' : '0';
     }
-
     
     vector<int16_t> samples(numFrames * numChannels);
     size_t index = 0; 
-    const int blockSize = 4096; 
+    const int blockSize = 4096;
 
+    int32_t mono_pred = 0;
+    int32_t mid_pred = 0;
+    int32_t side_pred = 0;
 
-    int16_t mono_pred = 0;
-    int16_t mid_pred = 0;
-    int16_t side_pred = 0;
-
-    // Processamento por blocos para descodificação adaptativa
+    // Ciclo de descodificação por blocos, lendo 'm' adaptativo e reconstruindo amostras
     try {
         for (sf_count_t frame_start = 0; frame_start < numFrames; frame_start += blockSize) {
             sf_count_t frame_end = min(frame_start + blockSize, numFrames);
             sf_count_t framesInBlock = frame_end - frame_start;
             
-
-            // Leitura dos parâmetros m para o bloco
+            // Leitura dos valores 'm' para os canais no início do bloco
             int m1 = static_cast<int>(binary_string_to_int(bitstream, index, 16));
             if (m1 <= 0) m1 = 1;
             int m2 = 0;
@@ -76,53 +75,45 @@ int main(int argc, char* argv[]) {
             Golomb g1(m1, SignHandling::INTERLEAVING);
             Golomb g2(m2 > 0 ? m2 : 1, SignHandling::INTERLEAVING);
 
-            // Descodificação e reconstrução das amostras por bloco
+            // Processamento das amostras no bloco: predição, descodificação e reconstrução
             for (sf_count_t i = 0; i < framesInBlock; i++) {
-                sf_count_t frame_index = frame_start + i; // Índice global da trama
+                sf_count_t frame_index = frame_start + i; 
 
                 if (numChannels == 1) {
-                    // Reconstrução temporal para mono: soma do resíduo ao preditor
-                    int prediction = mono_pred;
-
-                    int residual = g1.decode(bitstream, index);
-                    int reconstructed = prediction + residual;
+                    int32_t prediction = mono_pred;
+                    int32_t residual = g1.decode(bitstream, index);
+                    int32_t reconstructed = prediction + residual;
                     
-                    if (reconstructed > 32767) reconstructed = 32767;
-                    if (reconstructed < -32768) reconstructed = -32768;
+                    int32_t clamped_sample = reconstructed;
+                    if (clamped_sample > 32767) clamped_sample = 32767;
+                    else if (clamped_sample < -32768) clamped_sample = -32768;
 
-                    samples[frame_index] = static_cast<int16_t>(reconstructed);
-                    mono_pred = samples[frame_index]; 
+                    samples[frame_index] = static_cast<int16_t>(clamped_sample);
+                    mono_pred = reconstructed; 
                 
                 } else { 
-                    // Reconstrução inter-canal para estéreo: cálculo de L e R a partir de mid e side
-                    int pred_mid = mid_pred;
-                    int pred_side = side_pred;
+                    int32_t pred_mid = mid_pred;
+                    int32_t pred_side = side_pred;
 
-                    int res_mid = g1.decode(bitstream, index);
-                    int res_side = g2.decode(bitstream, index);
+                    int32_t res_mid = g1.decode(bitstream, index);
+                    int32_t res_side = g2.decode(bitstream, index);
 
-                    int16_t mid = static_cast<int16_t>(pred_mid + res_mid);
-                    int16_t side = static_cast<int16_t>(pred_side + res_side);
+                    int32_t mid = pred_mid + res_mid;
+                    int32_t side = pred_side + res_side;
 
-   
-                    int l_recon = mid + (side + 1) / 2;
-                    int r_recon = l_recon - side;
+                    int32_t r_recon = mid - (side >> 1);
+                    int32_t l_recon = r_recon + side;
 
-                    // Clamping para evitar overflow
-                    if (l_recon > 32767) {
-                        l_recon = 32767;
-                    } else if (l_recon < -32768) { 
-                        l_recon = -32768;
-                    }
+                    int32_t clamped_l = l_recon;
+                    int32_t clamped_r = r_recon;
+                    if (clamped_l > 32767) clamped_l = 32767;
+                    else if (clamped_l < -32768) clamped_l = -32768;
 
-                    if (r_recon > 32767) {
-                        r_recon = 32767;
-                    } else if (r_recon < -32768) {
-                        r_recon = -32768;
-                    }
+                    if (clamped_r > 32767) clamped_r = 32767;
+                    else if (clamped_r < -32768) clamped_r = -32768;
 
-                    samples[frame_index * 2] = static_cast<int16_t>(l_recon);
-                    samples[frame_index * 2 + 1] = static_cast<int16_t>(r_recon);
+                    samples[frame_index * 2] = static_cast<int16_t>(clamped_l);
+                    samples[frame_index * 2 + 1] = static_cast<int16_t>(clamped_r);
 
                     mid_pred = mid;
                     side_pred = side;
@@ -134,7 +125,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Escrita das amostras reconstruídas no ficheiro WAV de saída
+    // Escrita do áudio descodificado em formato WAV
     SF_INFO sfInfoOut;
     sfInfoOut.samplerate = sampleRate;
     sfInfoOut.channels = numChannels;
