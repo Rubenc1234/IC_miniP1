@@ -92,7 +92,7 @@
 % ----------------------------------------------------------------------------------
 \section{Introdução}
 
-Este relatório documenta o desenvolvimento e os resultados obtidos no âmbito do Trabalho Laboratorial nº 2 da cadeira de Informação e Codificação.
+Este relatório documenta o desenvolvimento e os resultados obtidos no âmbito do Trabalho Laboratorial nº 2 da unidade curricular de Informação e Codificação.
 
 O projeto foca-se em duas áreas principais: a manipulação básica de imagens digitais utilizando a biblioteca OpenCV e a implementação de um sistema de codificação entrópica (Codificação Golomb) aplicado à compressão sem perdas (\textit{lossless}) de sinais de áudio e imagem.
 
@@ -165,7 +165,7 @@ A Figura~\ref{fig:canais_extraidos} mostra o resultado da extração dos três c
 Este programa engloba um conjunto de operações geométricas e de intensidade sobre imagens, implementadas através da manipulação direta dos píxeis, sem recurso a funções específicas do OpenCV para essas transformações. Foram criados programas separados para cada operação para maior clareza.
 
 \subsubsection{Negativo da Imagem (\texttt{image\_negative})}
-A operação de negativo consiste em inverter os valores de intensidade de cada canal de cor de uma imagem. 
+Esta operação inverte os valores de intensidade de cada canal de cor de uma imagem. 
 Para imagens com 8 bits por canal, o valor de cada píxel no negativo, denotado por $P'_{\text{cor}}$, é obtido subtraindo o valor original $P_{\text{cor}}$ de 255, ou seja, 
 $P'_{\text{cor}} = 255 - P_{\text{cor}}$. 
 Esta operação é realizada de forma independente em cada um dos canais B, G e R.
