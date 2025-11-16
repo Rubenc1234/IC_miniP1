@@ -480,22 +480,6 @@ O descodificador (\texttt{audio\_decoder.cpp}) inverte o processo, lendo o \text
 \end{lstlisting}
 
 
-\begin{figure}[htbp]
-\centering
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=0.8\textwidth]{imagens/airplane.png} % Assumindo que tem uma versão png da original
-    \caption{Imagem Original (airplane)}
-\end{minipage}
-\vspace{0.5cm} % Espaço vertical entre as linhas de imagens
-\begin{minipage}{0.48\textwidth}
-    \centering
-    \includegraphics[width=0.8\textwidth]{imagens/airplane_decompressed.png}
-    \caption{Imagem Decomprimida}
-\end{minipage}
-\label{fig:imagem_decomprimida}
-\end{figure}
-
 
 \subsubsection{Garantia de Reconstrução Lossless}
 Duas decisões de implementação são cruciais para garantir a reconstrução 100\% \textit{lossless} do sinal:
@@ -643,6 +627,24 @@ O descodificador (\texttt{image\_decoder.cpp}) inverte o processo, lê o \texttt
 ./bin/image_decoder out/airplane.gol out/airplane_gray.ppm
 \end{lstlisting}
 
+\begin{figure}[htbp]
+\centering
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.8\textwidth]{imagens/airplane.png} % Assumindo que tem uma versão png da original
+    \caption{Imagem Original (airplane)}
+\end{minipage}
+\vspace{0.5cm} % Espaço vertical entre as linhas de imagens
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.8\textwidth]{imagens/airplane_decompressed.png}
+    \caption{Imagem Decomprimida}
+\end{minipage}
+\label{fig:imagem_decomprimida}
+\end{figure}
+
+
+
 \subsection{Análise de Desempenho e Compressão}
 
 A eficácia do codec foi testada com três imagens de teste.
@@ -694,8 +696,8 @@ A eficácia do codec foi testada com três imagens de teste. Para garantir uma c
 \toprule
 \textbf{Codec} & \textbf{airplane.ppm} & \textbf{arial.ppm} & \textbf{bike3.ppm} \\ \midrule
 Original (PPM Color) & 769 kB & 1.1 MB & 2.1 MB \\
-\textbf{O Nosso Codec (.gol)} & \textbf{130 kB} & 262 kB & 423 kB \\
-PNG (Max Compression) & 138 kB & \textbf{255 kB} & \textbf{420 kB} \\
+\textbf{O Nosso Codec (.gol)} & \textbf{130 kB} & \textbf{262 kB} & \textbf{423 kB} \\
+PNG (Max Compression) & 138 kB & 255 kB & 420 kB \\
 FLIF (Lossless) & 124 kB & 227 kB & 374 kB \\
 \bottomrule
 \end{tabular}
