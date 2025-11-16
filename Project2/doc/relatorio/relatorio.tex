@@ -342,7 +342,7 @@ A classe foi projetada para servir como base para os codecs \textit{lossless} na
 
 \subsection{Princípio de Codificação Golomb}
 
-A codificação Golomb é uma família de códigos que depende de um parâmetro inteiro $m > 0$. A implementação segue a teoria descrita nos documentos de apoio:
+A codificação Golomb depende de um parâmetro inteiro $m > 0$. A implementação segue a teoria descrita nos documentos de apoio:
 
 \begin{enumerate}
     \item Um inteiro não-negativo $i$ é dividido em duas partes: um quociente $q$ e um resto $r$, calculados como $q = \lfloor i/m \rfloor$ e $r = i - q m$.
@@ -356,10 +356,10 @@ A codificação Golomb é uma família de códigos que depende de um parâmetro 
 Se $m = 2^b$, o resto $r$ (que estará no intervalo $[0, m-1]$) é simplesmente codificado usando a sua representação binária com $b = \log_2(m)$ bits.
 
 \paragraph{Caso 2: $m$ não é uma potência de 2 (Código Binário Truncado)}
-Se $m$ não é uma potência de 2, a codificação do resto é otimizada usando a regra do "truncated binary code":
+Se $m$ não é uma potência de 2, a codificação do resto é otimizada usando a regra truncated binary code:
 \begin{enumerate}
     \item Calcula-se $b = \lceil \log_2 m \rceil$.
-    \item Calcula-se o valor de "corte" $t = 2^b - m$.
+    \item Calcula-se $t = 2^b - m$.
     \item Se $r < t$, o resto é codificado usando $b-1$ bits.
     \item Se $r \ge t$, o resto é codificado usando $b$ bits, representando o valor $r + t$.
 \end{enumerate}
@@ -441,7 +441,7 @@ O codificador (\texttt{audio\_encoder.cpp}) processa o áudio em blocos, calcula
 \end{enumerate}
 
 \subsubsection{Determinação Adaptativa do Parâmetro \texttt{m}}
-A chave para a compressão é "sintonizar" o codificador Golomb com os dados. A função \texttt{calculate\_optimal\_m} é usada para encontrar o \texttt{m} ideal para cada bloco de resíduos.
+Para uma boa compressão é necessário ajustar o codificador Golomb às características dos dados. A função \texttt{calculate\_optimal\_m} é usada para encontrar o \texttt{m} ideal para cada bloco de resíduos.
 
 \paragraph{Teoria vs. Prática}
 A teoria define \texttt{m} em função de parâmetros estatísticos teóricos ($\alpha$ ou $p=P(x=0)$). Na prática, não conhecemos estes parâmetros, mas podemos medi-los através da média dos nossos dados (os resíduos).
@@ -543,8 +543,8 @@ Os resultados apresentados na Tabela~\ref{tab:compressao_audio_comparativa} são
 
 Esta proximidade demonstra a eficácia da nossa implementação:
 \begin{itemize}
-    \item \textbf{Eficiência da Adaptação:} O facto de estarmos tão perto do FLAC, mesmo usando um preditor linear fixo de 1ª ordem ($P[n]=x[n-1]$), prova que a nossa estratégia de adaptação do parâmetro \texttt{m} por bloco (4096 amostras) é altamente eficaz. O codec consegue ajustar-se rapidamente às variações de energia do sinal, maximizando a eficiência do código Golomb.
-    \item \textbf{Diferença para o FLAC:} A vantagem residual do FLAC (cerca de 6\% extra de poupança) deve-se ao uso de \textbf{Predição Linear Adaptativa (LPC)}. Enquanto o nosso codec usa um preditor fixo, o FLAC calcula coeficientes de predição ótimos para cada bloco, conseguindo reduzir ainda mais os resíduos em passagens complexas. No entanto, o custo computacional dessa otimização é muito superior ao do nosso método.
+    \item \textbf{Eficiência da Adaptação:} O facto de estarmos tão perto do FLAC, mesmo usando um preditor linear fixo de 1ª ordem ($P[n]=x[n-1]$), prova que a estratégia de adaptação do parâmetro \texttt{m} por bloco (4096 amostras) é altamente eficaz. O codec consegue ajustar-se rapidamente às variações de energia do sinal, maximizando a eficiência do código Golomb.
+    \item \textbf{Diferença para o FLAC:} A vantagem de compressão do FLAC (cerca de 6\% extra de poupança) deve-se ao uso de \textbf{Predição Linear Adaptativa (LPC)}. Enquanto o nosso codec usa um preditor fixo, o FLAC calcula coeficientes de predição ótimos para cada bloco, conseguindo reduzir ainda mais os resíduos em passagens complexas. No entanto, o custo computacional dessa otimização é muito superior ao do nosso método.
 \end{itemize}
 
 Em suma, o nosso codec oferece um excelente compromisso, atingindo uma performance competitiva com uma complexidade algorítmica muito inferior à de um codec comercial.
@@ -562,7 +562,7 @@ O codificador (\texttt{image\_encoder.cpp}) implementa uma lógica adaptativa po
 
 \begin{enumerate}
     \item \textbf{Leitura e Conversão:} A imagem de entrada (PPM) é lida e convertida para escala de cinza usando a função \texttt{readPPMtoGray}.
-    \item \textbf{Escrita do Cabeçalho:} Um "magic number" (\texttt{"GOL1"}) é escrito, seguido das dimensões da imagem e \texttt{maxval}.
+    \item \textbf{Escrita do Cabeçalho:} O ficheiro começa com a escrita de um \textit{magic number} de 4 bytes: \texttt{"GOL1"}. Esta assinatura serve para identificar o formato do ficheiro, permitindo ao descodificador validar imediatamente se o ficheiro de entrada é compatível antes de tentar processá-lo. De seguida, são escritas as dimensões da imagem (\texttt{width}, \texttt{height}), o valor máximo de píxel (\texttt{maxval}) e o número de canais (sempre 1 neste codec).
     \item \textbf{Processamento por Blocos (16x16):} Para cada bloco:
     \begin{itemize}
         \item \textbf{Passagem 1 (Análise):} O codificador calcula os resíduos de predição para o bloco. É usado o preditor MED (Median Edge-Detection), que estima o píxel atual $P(x,y)$ com base nos vizinhos Oeste ($a$), Norte ($b$) e Noroeste ($c$):
