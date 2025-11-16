@@ -98,6 +98,9 @@ O projeto foca-se em duas áreas principais: a manipulação básica de imagens 
 
 O código-fonte completo do projeto está disponível publicamente no seguinte repositório GitHub: \url{https://github.com/Rubenc1234/IC_miniP1/tree/main/Project2}.
 
+\textbf{Nota:} Todas as imagens incluídas neste relatório foram convertidas do formato PPM para PNG para compatibilidade com o LaTeX.
+
+
 % ----------------------------------------------------------------------------------
 % SECÇÃO 2: PARTE I - MANIPULAÇÃO DE IMAGENS COM OPENCV
 % ----------------------------------------------------------------------------------
@@ -136,25 +139,25 @@ A Figura~\ref{fig:canais_extraidos} mostra o resultado da extração dos três c
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.8\textwidth]{imagens/airplane.png} % Assumindo que tem uma versão png da original
-    \caption*{Imagem Original (airplane)}
+    \caption{Imagem Original (airplane)}
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.8\textwidth]{imagens/airplane_extract_0.png}
-    \caption*{Canal Azul (0)}
+    \caption{Canal Azul (0)}
 \end{minipage}
 \vspace{0.5cm} % Espaço vertical entre as linhas de imagens
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.8\textwidth]{imagens/airplane_extract_1.png}
-    \caption*{Canal Verde (1)}
+    \caption{Canal Verde (1)}
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.8\textwidth]{imagens/airplane_extract_2.png}
-    \caption*{Canal Vermelho (2)}
+    \caption{Canal Vermelho (2)}
 \end{minipage}
 \caption{Extração dos canais B, G, R da imagem original.}
 \label{fig:canais_extraidos}
@@ -187,13 +190,13 @@ O resultado é apresentado na Figura~\ref{fig:negativo}.
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.8\textwidth]{imagens/airplane.png}
-    \caption*{Imagem Original}
+    \caption{Imagem Original}
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.8\textwidth]{imagens/airplane_neg.png}
-    \caption*{Imagem Negativa}
+    \caption{Imagem Negativa}
 \end{minipage}
 \caption{Resultado da operação de negativo.}
 \label{fig:negativo}
@@ -225,19 +228,19 @@ Os resultados são apresentados na Figura~\ref{fig:espelhamento}.
 \begin{minipage}{0.32\textwidth}
     \centering
     \includegraphics[width=\textwidth]{imagens/airplane.png}
-    \caption*{Original}
+    \caption{Original}
 \end{minipage}
 \hfill
 \begin{minipage}{0.32\textwidth}
     \centering
     \includegraphics[width=\textwidth]{imagens/airplane_mirror_h.png}
-    \caption*{Espelhada Horizontalmente}
+    \caption{Espelhada Horizontalmente}
 \end{minipage}
 \hfill
 \begin{minipage}{0.32\textwidth}
     \centering
     \includegraphics[width=\textwidth]{imagens/airplane_mirror_v.png}
-    \caption*{Espelhada Verticalmente}
+    \caption{Espelhada Verticalmente}
 \end{minipage}
 \caption{Resultados da operação de espelhamento.}
 \label{fig:espelhamento}
@@ -266,25 +269,25 @@ A Figura~\ref{fig:rotacao} ilustra a rotação de 90 graus.
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.7\textwidth]{imagens/airplane.png} % Ajustar tamanho se necessário
-    \caption*{Imagem Original}
+    \caption{Imagem Original}
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.7\textwidth]{imagens/airplane_rotated90.png}
-    \caption*{Rotação 90° Horário}
+    \caption{Rotação 90° Horário}
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.7\textwidth]{imagens/airplane_rotated180.png}
-    \caption*{Rotação 180° Horário}
+    \caption{Rotação 180° Horário}
 \end{minipage}
 \hfill
 \begin{minipage}{0.48\textwidth}
     \centering
     \includegraphics[width=0.7\textwidth]{imagens/airplane_rotated270.png}
-    \caption*{Rotação 270° Horário}
+    \caption{Rotação 270° Horário}
 \end{minipage}
 \caption{Resultado da operação de rotação.}
 \label{fig:rotacao}
@@ -314,19 +317,19 @@ A Figura~\ref{fig:intensidade} mostra os resultados para aumento e diminuição 
 \begin{minipage}{0.32\textwidth}
     \centering
     \includegraphics[width=\textwidth]{imagens/airplane.png}
-    \caption*{Original (0\%)}
+    \caption{Original (0\%)}
 \end{minipage}
 \hfill
 \begin{minipage}{0.32\textwidth}
     \centering
     \includegraphics[width=\textwidth]{imagens/airplane_brighter_50.png}
-    \caption*{Brilho +50\%}
+    \caption{Brilho +50\%}
 \end{minipage}
 \hfill
 \begin{minipage}{0.32\textwidth}
     \centering
     \includegraphics[width=\textwidth]{imagens/airplane_darker_-50.png}
-    \caption*{Brilho -50\%}
+    \caption{Brilho -50\%}
 \end{minipage}
 \caption{Resultados da operação de ajuste de intensidade.}
 \label{fig:intensidade}
@@ -477,6 +480,23 @@ O descodificador (\texttt{audio\_decoder.cpp}) inverte o processo, lendo o \text
 \end{lstlisting}
 
 
+\begin{figure}[htbp]
+\centering
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.8\textwidth]{imagens/airplane.png} % Assumindo que tem uma versão png da original
+    \caption{Imagem Original (airplane)}
+\end{minipage}
+\vspace{0.5cm} % Espaço vertical entre as linhas de imagens
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.8\textwidth]{imagens/airplane_decompressed.png}
+    \caption{Imagem Decomprimida}
+\end{minipage}
+\label{fig:imagem_decomprimida}
+\end{figure}
+
+
 \subsubsection{Garantia de Reconstrução Lossless}
 Duas decisões de implementação são cruciais para garantir a reconstrução 100\% \textit{lossless} do sinal:
 \begin{itemize}
@@ -495,8 +515,8 @@ O codec foi testado com dois ficheiros de áudio estéreo.
 \begin{tabular}{@{}lrrr@{}}
 \toprule
 \textbf{Ficheiro} & \textbf{Original} & \textbf{Comprimido} & \textbf{Taxa de Compressão} \\ \midrule
-sample.wav & 2.1 MB & 1.6 MB &  1.31 : 1 \\
-sample2.wav & 4.8 MB & 3.1 MB &  1.55 : 1 \\
+sample.wav & 2.1 MB & 1.6 MB & 1.31 : 1 \\
+sample2.wav & 4.8 MB & 3.1 MB & 1.55 : 1 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -514,13 +534,27 @@ sample2.wav & 216.66 ms & 113.14 ms \\
 \end{tabular}
 \end{table}
 
+\subsubsection{Verificação Lossless}
+Para garantir a integridade dos dados, foi utilizado o programa \texttt{wav\_cmp} para comparar o ficheiro original com o ficheiro descodificado. Os resultados para o ficheiro \texttt{sample.wav} são apresentados na Tabela~\ref{tab:wav_cmp_results}.
+
 \paragraph{Análise dos Resultados}
-Os testes de verificação com \texttt{wav\_cmp} (demonstrados nos testes executados) confirmaram que o codec é 100\% lossless, com `MSE = 0.0` e `SNR = inf`. A compressão alcançada (1.3:1 a 1.5:1) é modesta. Isto deve-se inteiramente à simplicidade do preditor de 1ª ordem ($P[n] = x[n-1]$). Este preditor é fraco para sinais de áudio complexos, gerando resíduos médios elevados. Consequentemente, o \texttt{m} ótimo calculado por bloco é alto, e a codificação Golomb não consegue ser muito eficiente.
+A Tabela~\ref{tab:wav_cmp_results} comprova matematicamente que o codec é 100\% lossless, com um erro quadrático médio (MSE) de zero e um SNR infinito. Isto valida a eficácia da nossa implementação de aritmética inteira de 32 bits e da transformação MID/SIDE reversível.
 
+Relativamente à compressão alcançada (1.3:1 a 1.5:1) é modesta e devida à simplicidade do preditor de 1ª ordem ($P[n] = x[n-1]$). Este preditor é fraco para sinais de áudio complexos, gerando resíduos médios elevados. Consequentemente, o \texttt{m} ótimo calculado por bloco é alto, e a codificação Golomb não consegue ser muito eficiente.
+\begin{table}[htbp]
+\centering
+\caption{Resultados de Verificação Lossless (\texttt{wav\_cmp}) para \texttt{sample.wav}}
+\label{tab:wav_cmp_results}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Canal} & \textbf{MSE ($L^2$)} & \textbf{Erro Máx ($L^\infty$)} & \textbf{SNR (dB)} \\ \midrule
+Channel 0 (L) & 0.000000 & 0.000000 & $\infty$ (perfect match) \\
+Channel 1 (R) & 0.000000 & 0.000000 & $\infty$ (perfect match) \\
+MID Channel & 0.000000 & 0.000000 & $\infty$ (perfect match) \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\subsection{Comparação com Codec FLAC}
-
-Para a análise, foi utilizado um ficheiro de áudio estéreo de 12 segundos (2.1 MB). Para validar a eficiência do codec desenvolvido, os resultados foram comparados com o FLAC (\textit{Free Lossless Audio Codec}) configurado com compressão máxima (\texttt{-8}).
 
 \subsubsection{Resultados Comparativos}
 
@@ -548,6 +582,7 @@ Esta proximidade demonstra a eficácia da nossa implementação:
 \end{itemize}
 
 Em suma, o nosso codec oferece um excelente compromisso, atingindo uma performance competitiva com uma complexidade algorítmica muito inferior à de um codec comercial.
+
 % ----------------------------------------------------------------------------------
 % SECÇÃO 5: PARTE IV - CODEC IMAGEM LOSSLESS (GRAYSCALE)
 % ----------------------------------------------------------------------------------
@@ -577,6 +612,7 @@ O codificador (\texttt{image\_encoder.cpp}) implementa uma lógica adaptativa po
         \item \textbf{Escrita de \texttt{m}:} O \texttt{m} ótimo (16 bits) é escrito no \textit{bitstream} do bloco.
         \item \textbf{Passagem 2 (Codificação):} Os resíduos do bloco são codificados com \texttt{Golomb(m\_otimo, INTERLEAVING)} e escritos no \textit{bitstream}.
     \end{itemize}
+    \item \textbf{Empacotamento de Bits:} O \textit{bitstream} completo é empacotado em bytes e escrito no ficheiro.
 \end{enumerate}
 
 \subsubsection{Algoritmo de Descodificação}
@@ -589,9 +625,28 @@ O descodificador (\texttt{image\_decoder.cpp}) inverte o processo.
     \item Descodifica o resíduo $e$ e reconstrói o píxel $\text{píxel} = P(x,y) + e$.
 \end{enumerate}
 
+\subsubsection{Sintaxe e Exemplos}
+O codificador calcula \texttt{m} automaticamente, não é um argumento.
+\begin{lstlisting}[language=bash, caption=Sintaxe de Uso do image\_encoder]
+./bin/image_encoder <imagem_entrada.ppm> <ficheiro_saida.gol>
+\end{lstlisting}
+\begin{lstlisting}[language=bash, caption=Exemplo de Codificação de Imagem]
+./bin/image_encoder img/airplane.ppm out/airplane.gol
+\end{lstlisting}
+
+\subsection{Descodificador \texttt{image\_decoder}}
+O descodificador (\texttt{image\_decoder.cpp}) inverte o processo, lê o \texttt{m} de cada bloco.
+\begin{lstlisting}[language=bash, caption=Sintaxe de Uso do image\_decoder]
+./bin/image_decoder <ficheiro_entrada.gol> <imagem_saida.ppm>
+\end{lstlisting}
+\begin{lstlisting}[language=bash, caption=Exemplo de Descodificação de Imagem]
+./bin/image_decoder out/airplane.gol out/airplane_gray.ppm
+\end{lstlisting}
+
 \subsection{Análise de Desempenho e Compressão}
 
 A eficácia do codec foi testada com três imagens de teste.
+
 
 \begin{table}[htbp]
 \centering
@@ -613,21 +668,18 @@ bike3.ppm & 2.1 MB & 423 kB & \textbf{4.96 : 1} \\
 \label{tab:tempos_imagem}
 \begin{tabular}{@{}lrr@{}}
 \toprule
-\textbf{Imagem} & \textbf{Codificação (s)} & \textbf{Descodificação (ms)} \\ \midrule
-airplane.ppm & 1.05 s & 24.12 ms \\
-arial.ppm & 4.73 s & 34.86 ms \\
-bike3.ppm & 11.42 s & 60.16 ms \\
+\textbf{Imagem} & \textbf{Codificação} & \textbf{Descodificação} \\ \midrule
+airplane.ppm & 28 ms & 22 ms \\
+arial.ppm & 40 ms & 36 ms \\
+bike3.ppm & 75 ms & 61 ms \\
 \bottomrule
 \end{tabular}
 \end{table}
 
+
 \subsubsection{Análise dos Resultados}
 Os resultados demonstram uma eficácia excecional do codec de imagem, com taxas de compressão a rondar 5:1 ou 6:1.
-
-\begin{itemize}
-    \item \textbf{Eficácia do Preditor MED:} O sucesso deve-se principalmente ao preditor não-linear MED. Ao contrário do preditor linear simples do áudio, o MED adapta-se às arestas da imagem, gerando resíduos extremamente pequenos (muitas vezes zero) em áreas uniformes.
-    \item \textbf{Assimetria de Tempo:} Observa-se uma grande assimetria nos tempos de execução (Tabela~\ref{tab:tempos_imagem}). A descodificação é extremamente rápida (milissegundos) porque é uma operação direta. A codificação é mais lenta (segundos) devido à necessidade de processar cada bloco duas vezes: uma para calcular estatísticas e o \texttt{m} ótimo, e outra para codificar.
-\end{itemize}
+O sucesso deve-se principalmente ao preditor não-linear MED. Ao contrário do preditor linear simples do áudio, o MED adapta-se às arestas da imagem, gerando resíduos extremamente pequenos (muitas vezes zero) em áreas uniformes.
 
 
 \subsection{Comparação com Standards de Compressão Lossless}
@@ -650,10 +702,10 @@ FLIF (Lossless) & 124 kB & 227 kB & 374 kB \\
 \end{table}
 
 \subsubsection{Discussão dos Resultados}
-Os resultados obtidos são excelentes e validam a qualidade do algoritmo implementado.
+Os resultados obtidos validam a qualidade e a eficiência do algoritmo implementado.
 
 \begin{itemize}
-    \item \textbf{Competitividade com PNG:} O nosso codec conseguiu superar o standard PNG na imagem \texttt{airplane} (130kB vs 138kB) e obteve um empate técnico na imagem \texttt{bike3} (diferença de apenas 3kB). Na imagem \texttt{arial} (texto/gráficos), o PNG obteve uma ligeira vantagem.
+    \item \textbf{Taxa de Compressão:} O codec demonstrou ser altamente competitivo, superando o standard PNG na imagem \texttt{airplane} (130kB vs 138kB) e empatando tecnicamente na imagem \texttt{bike3}.
     \item \textbf{Proximidade ao Estado da Arte:} Em comparação com o FLIF, um dos codecs mais avançados da atualidade, o nosso codec manteve-se notavelmente próximo (e.g., 130kB vs 124kB no \texttt{airplane}).
 \end{itemize}
 

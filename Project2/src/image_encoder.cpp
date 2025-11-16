@@ -48,8 +48,9 @@ int main(int argc, char** argv) {
     int channels = 1;
     fout.write(reinterpret_cast<const char*>(&channels), sizeof(channels));
 
-    string bitBuffer;
-    const int blockSize = 16; 
+    vector<bool> bitBuffer;
+    bitBuffer.reserve(img.width * img.height * 10); // Pre-alocar espaço estimado
+    const int blockSize = 16;
 
     // Ciclo de codificação por blocos: cálculo de resíduos, 'm' ótimo e codificação
     for (int by = 0; by < img.height; by += blockSize) {
@@ -71,26 +72,37 @@ int main(int argc, char** argv) {
             // Cálculo do 'm' ótimo para o bloco
             int mToUse = calculate_optimal_m(blockResiduals);
             
-            bitBuffer += int_to_binary_string(mToUse, 16); 
+            // Converter m para bits e adicionar ao buffer
+            for (int i = 15; i >= 0; --i) {
+                bitBuffer.push_back((mToUse >> i) & 1);
+            }
             
-            // Codificação dos resíduos com Golomb
             Golomb golomb(mToUse, SignHandling::INTERLEAVING);
             for (int res : blockResiduals) {
-                bitBuffer += golomb.encode(res);
+                string encoded = golomb.encode(res);
+                for (char c : encoded) {
+                    bitBuffer.push_back(c == '1');
+                }
             }
         }
     }
 
-    // Escrita do bitstream em bytes no ficheiro de saída
-    while (bitBuffer.size() >= 8) {
-        string byteStr = bitBuffer.substr(0, 8);
-        uint8_t byte = static_cast<uint8_t>(stoi(byteStr, nullptr, 2));
+    // Escrever bits como bytes
+    size_t i = 0;
+    while (i + 8 <= bitBuffer.size()) {
+        uint8_t byte = 0;
+        for (int j = 0; j < 8; ++j) {
+            byte = (byte << 1) | (bitBuffer[i++] ? 1 : 0);
+        }
         fout.write(reinterpret_cast<const char*>(&byte), 1);
-        bitBuffer.erase(0,8);
     }
-    if (!bitBuffer.empty()) {
-        bitBuffer.append(8 - bitBuffer.size(), '0'); // Padding
-        uint8_t byte = static_cast<uint8_t>(stoi(bitBuffer, nullptr, 2));
+    // Padding dos bits restantes
+    if (i < bitBuffer.size()) {
+        uint8_t byte = 0;
+        int shift = 7;
+        while (i < bitBuffer.size()) {
+            byte |= (bitBuffer[i++] ? 1 : 0) << shift--;
+        }
         fout.write(reinterpret_cast<const char*>(&byte), 1);
     }
 
