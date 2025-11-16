@@ -142,3 +142,9 @@ Os executáveis encontram-se na pasta `bin/`. Execute-os a partir da raiz do pro
 ./bin/audio_encoder wav/sample.wav wav_out/compressed.bin
 ./bin/audio_decoder wav_out/compressed.bin wav_out/output.wav
 ```
+
+**Encoder e decoder de imagens**
+```bash
+./bin/image_encoder img/airplane.ppm out/compressed.gold
+./bin/image_decoder out/compressed.gold out/decompressed.ppm
+```

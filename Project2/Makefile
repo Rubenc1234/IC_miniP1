@@ -11,6 +11,7 @@ SRCDIR = src
 BINDIR = bin
 IMGDIR = img
 OUTDIR = out
+WAVOUTDIR = wav_out
 
 # Encontrar flags do OpenCV usando pkg-config
 OPENCV_CFLAGS = $(shell pkg-config --cflags opencv4)
@@ -35,11 +36,17 @@ EXECUTABLES = $(BINDIR)/extract_channel \
 			  $(BINDIR)/image_decoder
 			  
 # Alvo principal: compila todos os executáveis
-all: $(EXECUTABLES)
+all: $(EXECUTABLES) | $(OUTDIR) $(WAVOUTDIR)
 
 # Regra para criar a diretoria bin/ se não existir
 $(BINDIR):
 	@mkdir -p $(BINDIR)
+
+$(OUTDIR):
+	@mkdir -p $(OUTDIR)
+
+$(WAVOUTDIR):
+	@mkdir -p $(WAVOUTDIR)
 
 # Regra genérica para compilar um .cpp de src/ para um executável em bin/
 $(BINDIR)/%: $(SRCDIR)/%.cpp | $(BINDIR)
@@ -67,6 +74,8 @@ $(BINDIR)/image_decoder: $(SRCDIR)/image_decoder.cpp $(SRCDIR)/Golomb.cpp $(SRCD
 clean:
 	@echo "Limpando executáveis..."
 	@rm -f $(EXECUTABLES)
+	@echo "Removendo diretórios de saída..."
+	@rm -rf $(OUTDIR) $(WAVOUTDIR)
 	@echo "Limpeza concluída."
 
 # Phony targets (alvos que não representam ficheiros)
