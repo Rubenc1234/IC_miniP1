@@ -1,0 +1,12 @@
+# Executáveis
+
+build/
+
+model.safetensors
+
+# Ficheiros objeto (se viessem a usar compilação separada)
+*.o
+
+# Ficheiros temporários de editores
+*~
+.vscode/
