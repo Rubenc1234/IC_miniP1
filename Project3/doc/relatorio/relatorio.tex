@@ -95,93 +95,98 @@
 O presente relatório técnico descreve o trabalho realizado no âmbito do projeto de compressão de um Grande Modelo de Linguagem (LLM). O objetivo central passa por desenvolver uma estratégia de compressão otimizada e eficiente para o ficheiro \texttt{model.safetensors} ($\sim 1\text{ GB}$) que contém os parâmetros de um LLM.\colorbox{yellow}{Continuar...}
 
 
-
-
 % ----------------------------------------------------------------------------------
-% SECÇÃO 2: PARTE I - MANIPULAÇÃO DE IMAGENS COM OPENCV
+% SECÇÃO 2: ANÁLISE E CARACTERIZAÇÃO DA FONTE
 % ----------------------------------------------------------------------------------
 \section{Análise e Caracterização da Fonte}
-Antes de aplicar qualquer algoritmo de compressão, procedeu-se a uma análise estrutural e estatística do ficheiro para determinar a natureza dos dados e os limites teóricos de compressão.
 
-\subsection{Estrutura do Ficheiro (\texttt{safetensors})}
-Através de engenharia reversa e análise do cabeçalho, determinou-se que o formato \texttt{safetensors} consiste num bloco de memória contíguo dividido em três secções:
-\begin{enumerate}
-    \item \textbf{Tamanho do Cabeçalho:} Os primeiros $8$ bytes (inteiro de $64$ bits) indicam o tamanho da secção seguinte.
-    \item \textbf{Metadados (JSON):} Um cabeçalho descritivo contendo o nome, forma (\textit{shape}) e tipo de dados (\textit{dtype}) de cada tensor.
-    \item \textbf{Payload Binário:} A grande maioria do ficheiro consiste nos valores numéricos dos tensores concatenados.
-\end{enumerate}
+Para desenhar um codec eficiente, é imperativo compreender a natureza estatística da fonte de informação. Esta secção detalha a análise teórica e experimental realizada sobre o ficheiro \texttt{model.safetensors}.
 
-A inspeção do JSON revelou que todos os tensores estão armazenados no formato \textbf{BF16} (\textit{Brain Floating Point 16}). Ao contrário de um fluxo de bytes de texto ou imagem genérica, isto indica que o ficheiro é composto por sequências de números de $16$ bits ($2$ bytes).
-
-O formato BF16 segue a estrutura:
+\subsection{Análise Estrutural (Formato de Dados)}
+A inspeção do cabeçalho do ficheiro revelou que os dados estão armazenados no formato \textbf{BF16} (\textit{Brain Floating Point 16}). Ao contrário de inteiros de 16 bits, onde a distribuição de bits tende a ser uniforme em dados aleatórios, o BF16 possui uma semântica específica composta por:
 \begin{itemize}
-    \item $1$ bit: Sinal.
-    \item $8$ bits: Expoente.
-    \item $7$ bits: Mantissa.
+    \item \textbf{1 bit de Sinal ($S$)} e \textbf{8 bits de Expoente ($E$)}: Ocupam maioritariamente o byte mais significativo (MSB).
+    \item \textbf{7 bits de Mantissa ($M$)}: Ocupam o byte menos significativo (LSB).
 \end{itemize}
 
-Esta descoberta é fundamental, pois sugere uma correlação estrutural entre bytes alternados (\textit{Byte Alto} vs. \textit{Byte Baixo}), que seria ignorada se o ficheiro fosse tratado como um fluxo de bytes uniforme ($x(n)\in\{0,...,255\}$).
+Esta estrutura sugere a existência de correlações não-lineares e localizadas que uma análise puramente sequencial (byte-a-byte) poderá não capturar eficazmente.
 
-\subsection{Análise Teórica da Informação}
-Para quantificar o limite teórico de compressão, recorreu-se à definição de Entropia de Shannon, dada por:
-$$
-H(X) = - \sum_{i} P(x_i) \log_2 P(x_i)
-$$
-onde $P(x_i)$ é a probabilidade de ocorrência do símbolo $x_i$.
+\subsection{Limites Teóricos e Análise Global}
+O limite teórico fundamental para a compressão sem perdas é dado pela \textbf{Entropia de Shannon}. Considerando o ficheiro como uma fonte de memória nula $X$ que gera símbolos $x \in \{0, \dots, 255\}$, a entropia de ordem-0 é definida por:
 
-Dado que o ficheiro é constituído por valores BF16, formulou-se a hipótese de que a entropia não está uniformemente distribuída pelos $16$ bits.
-\begin{itemize}
-    \item \textbf{Byte Mais Significativo (MSB):} Contém o sinal e a maioria do expoente. Num modelo treinado, os pesos tendem a seguir uma distribuição normal centrada em zero, o que implica que os expoentes são altamente repetitivos (baixa entropia).
-    \item \textbf{Byte Menos Significativo (LSB):} Contém a mantissa. Devido à precisão numérica, espera-se que estes bits apresentem um comportamento ruidoso, aproximando-se de uma distribuição uniforme (alta entropia).
-\end{itemize}
+\begin{equation}
+    H(X) = - \sum_{i=0}^{255} P(x_i) \log_2 P(x_i) \quad \text{[bits/símbolo]}
+    \label{eq:shannon}
+\end{equation}
 
-\subsection{Resultados Experimentais}
-Para validar a hipótese, implementou-se uma ferramenta de análise que separa o ficheiro em dois fluxos distintos (\textit{Byte-Splitting}) e calcula a entropia de ordem-0 para cada um. Os resultados obtidos foram:
+Experimentalmente, ao aplicar a Equação \ref{eq:shannon} à totalidade do \textit{payload} binário, obteve-se:
+\begin{center}
+    \textbf{$H(X) \approx 6.22$ bits/byte}
+\end{center}
 
-\begin{table}[htbp]
+Este valor indica que, ignorando qualquer dependência entre bytes, a compressão máxima teórica seria de apenas $\sim 22\%$. Para investigar dependências sequenciais, calculou-se a \textbf{Entropia Condicional} de primeira ordem, que mede a incerteza de um símbolo $X_n$ dado o conhecimento do anterior $X_{n-1}$:
+
+\begin{equation}
+    H(X|Y) = - \sum_{y \in \mathcal{X}} P(y) \sum_{x \in \mathcal{X}} P(x|y) \log_2 P(x|y)
+    \label{eq:conditional}
+\end{equation}
+
+O resultado experimental obtido foi:
+\begin{center}
+    \textbf{$H(X_n | X_{n-1}) \approx 5.36$ bits/byte}
+\end{center}
+
+Embora $H(X|Y) < H(X)$, confirmando a existência de correlação inter-simbólica (teorema do condicionamento reduz a entropia), o valor $5.36$ permanece elevado. A nossa hipótese é que a natureza intercalada dos dados BF16 (MSB estruturado seguido de LSB ruidoso) "mascara"\ a verdadeira correlação entre os pesos adjacentes.
+
+\subsection{Análise Estrutural Diferenciada (\textit{Byte-Splitting})}
+Para validar a hipótese de que a entropia está concentrada no byte da mantissa, procedeu-se à separação do fluxo de dados em dois canais distintos: \textit{Stream MSB} (bytes ímpares) e \textit{Stream LSB} (bytes pares).
+
+As entropias de ordem-0 foram recalculadas individualmente para cada canal:
+
+\begin{table}[H]
     \centering
-    \caption{Resultados do Cálculo da Entropia de Ordem-0}
-    \label{tab:entropia}
-    \begin{tabular}{llccc}
+    \caption{Comparação de Entropia por Canal (Split)}
+    \label{tab:split_results}
+    \begin{tabular}{lccc}
         \toprule
-        \textbf{Fluxo de Dados} & \textbf{Conteúdo Principal} & \textbf{Entropia Calculada ($H$)} & \textbf{Redundância ($8-H$)} \\
+        \textbf{Canal} & \textbf{Conteúdo} & \textbf{Entropia Medida ($H$)} & \textbf{Característica} \\
         \midrule
-        LSB (Byte Baixo) & Mantissa (Precisão) & $7.96$ bits/byte & $\sim 0.04$ bits \\
-        MSB (Byte Alto) & Expoente + Sinal & $2.71$ bits/byte & $\sim 5.29$ bits \\
-        \midrule
-        Média Combinada & Ficheiro Completo & $5.34$ bits/byte & $\sim 2.66$ bits \\
+        \textbf{MSB} & Expoente/Sinal & \textbf{2.71 bits/byte} & Altamente Estruturado \\
+        \textbf{LSB} & Mantissa & \textbf{7.96 bits/byte} & Ruído Quase Uniforme \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-\subsubsection*{Interpretação dos Resultados:}
-\begin{itemize}
-    \item \textbf{O Fluxo LSB é Incompressível:} Com uma entropia de $\approx 7.96$ bits, este fluxo está muito próximo da entropia máxima de uma fonte uniforme ($H_{\text{max}}=\log_2 256=8$ bits). A aplicação de algoritmos de compressão complexos aqui resultaria num ganho negligenciável, desperdiçando tempo de computação.
-    \item \textbf{O Fluxo MSB é Altamente Compressível:} A entropia de $2.71$ bits indica uma redundância estatística significativa. Isto confirma que a estratégia de compressão deve focar-se agressivamente neste fluxo.
-    \item \textbf{Ganho com \textit{Byte-Splitting}:} Se comprimíssemos o ficheiro original sem separação, a entropia média seria de $5.34$ bits. Ao separar, isolamos o ``ruído'' num fluxo e a ``informação estruturada'' noutro, permitindo a aplicação de algoritmos otimizados para cada caso.
-\end{itemize}
+\subsubsection*{Evidência Visual}
+Os histogramas de frequência (Figuras \ref{fig:hist_msb} e \ref{fig:hist_lsb}) corroboram os valores numéricos. 
 
-\subsection{Definição da Estratégia de Compressão}
-Com base nesta análise, a arquitetura do compressor a desenvolver seguirá uma abordagem híbrida:
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{imagens/histogram_msb.png} % Certifica-te que a imagem está nesta pasta
+    \caption{Histograma do Byte Mais Significativo (MSB). Nota-se uma distribuição Laplaciana acentuada, típica de pesos de redes neuronais normalizados, justificando o valor baixo de $H \approx 2.71$.}
+    \label{fig:hist_msb}
+\end{figure}
 
-\begin{itemize}
-    \item \textbf{Pré-processamento:} Separação dos dados em dois \textit{streams} (MSB e LSB).
-    \item \begin{tcolorbox}[colback=yellow, boxrule=0pt, arc=0pt, left=0pt, right=0pt, top=0pt, bottom=0pt]
-    \textbf{Codificação do LSB:} Armazenamento direto (\textit{raw}) ou uso de um algoritmo leve (ex: RLE apenas para zeros), dado que $H\approx 8$.
-    \end{tcolorbox}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{imagens/histogram_lsb.png}
+    \caption{Histograma do Byte Menos Significativo (LSB). A distribuição aproxima-se da uniforme (plana), o que explica a entropia de $H \approx 7.96$, muito próxima do máximo teórico de 8 bits.}
+    \label{fig:hist_lsb}
+\end{figure}
 
-    \item \begin{tcolorbox}[colback=yellow, boxrule=0pt, arc=0pt, left=0pt, right=0pt, top=0pt, bottom=0pt]
-    \textbf{Codificação do MSB:}
-    \begin{enumerate}
-        \item Aplicação de Codificação Preditiva ($r_n = x_n - \hat{x}_n$) para tentar reduzir a entropia abaixo de $2.71$ bits, explorando a correlação entre pesos adjacentes.
-        \item Uso de Codificação de Entropia (Huffman ou Aritmética) para atingir o limite teórico calculado.
-    \end{enumerate}
-    \end{tcolorbox}
-\end{itemize}
+\subsection{Síntese e Estratégia Adotada}
+A média das entropias separadas é $(2.71 + 7.96)/2 \approx 5.34$, um valor virtualmente idêntico à Entropia Condicional global ($5.36$). Isto leva-nos a concluir que a "memória"\ da fonte detetada na análise global era, na verdade, a estrutura interna do formato BF16 e não apenas correlação sequencial.
 
-Esta estratégia visa maximizar o rácio de compressão onde ele é possível (MSB) e minimizar o uso de recursos onde o ganho é marginal (LSB), permitindo um equilíbrio entre a eficiência da compressão e a complexidade computacional.
-
-
+\begin{tcolorbox}[colback=yellow!10!white,colframe=yellow!50!black,title=Nota]
+Com base nestes dados teóricos e experimentais, a estratégia de compressão será:
+\begin{enumerate}
+    \item \textbf{Pré-processamento (Split):} Separar os fluxos para isolar o ruído da estrutura.
+    
+    \item \textbf{Canal LSB:} Dado que $H \approx 8$, não justifica custo computacional elevado. Será armazenado com compressão mínima ou nula.
+    \item \textbf{Canal MSB:} Dado que $H \approx 2.71$, este canal é o candidato ideal para \textbf{Codificação Preditiva} (Delta) seguida de \textbf{Codificação Entrópica} (Huffman ou Aritmética), visando reduzir a entropia residual para valores próximos de 2 bits/byte.
+    
+\end{enumerate}
+\end{tcolorbox}
 
 % ----------------------------------------------------------------------------------
 % SECÇÃO 6: CONCLUSÕES
