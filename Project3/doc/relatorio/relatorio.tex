@@ -1,0 +1,192 @@
+\documentclass[a4paper, 11pt, portuguese]{article}
+
+% --- PACOTES ESSENCIAIS ---
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc} % Codificação do ficheiro
+\usepackage{babel}          % Suporte para Português
+\usepackage{amsmath}        % Fórmulas matemáticas avançadas
+\usepackage{amssymb}        % Símbolos matemáticos
+\usepackage{graphicx}       % Inclusão de imagens
+\usepackage[
+    colorlinks=true,        % Links coloridos em vez de caixas
+    linkcolor=blue,         % Cor dos links internos
+    citecolor=blue,         % Cor das citações (se usar bib)
+    urlcolor=blue           % Cor dos URLs
+]{hyperref}                 % Links clicáveis (URLs, referências)
+\usepackage{geometry}       % Configuração das margens
+\usepackage{booktabs}       % Tabelas com melhor aspeto
+\usepackage{listings}       % Blocos de código formatados
+\usepackage{xcolor}         % Cores (usado nos listings)
+\usepackage{float}          % Controlo mais fino da posição de floats (figuras, tabelas)
+\usepackage{tcolorbox}     % Caixas coloridas (usado para destacar texto)
+
+% --- CONFIGURAÇÕES ---
+
+% Margens da página
+\geometry{
+ a4paper,
+ margin=2.5cm, % Margem de 2.5cm em todos os lados
+}
+
+% Estilo para blocos de código C++
+\definecolor{codegray}{rgb}{0.5,0.5,0.5} % Cor para comentários
+\definecolor{codeblue}{rgb}{0,0,0.6}    % Cor para palavras-chave
+\definecolor{codegreen}{rgb}{0,0.6,0}  % Cor para strings
+\lstdefinestyle{cppstyle}{
+    language=C++,
+    basicstyle=\ttfamily\footnotesize, % Fonte monoespaçada pequena
+    commentstyle=\color{codegray}\itshape, % Comentários em cinza itálico
+    keywordstyle=\color{codeblue}\bfseries, % Palavras-chave a azul negrito
+    stringstyle=\color{codegreen},    % Strings a verde
+    numberstyle=\tiny\color{codegray}, % Números de linha pequenos e cinza
+    breaklines=true,                  % Quebra de linhas longas
+    frame=single,                     % Caixa à volta do código
+    captionpos=b,                     % Legenda em baixo
+    showstringspaces=false,           % Não mostrar espaços em strings de forma especial
+    tabsize=4,                        % Tamanho da tabulação
+    numbers=left,                     % Números de linha à esquerda
+    stepnumber=1,                     % Numerar todas as linhas
+    numbersep=5pt,                    % Espaço entre números e código
+    backgroundcolor=\color{white},    % Fundo branco
+    % --- Tratamento de caracteres PT ---
+    literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1
+             {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1
+             {â}{{\^a}}1 {ê}{{\^e}}1 {ô}{{\^o}}1
+             {Â}{{\^A}}1 {Ê}{{\^E}}1 {Ô}{{\^O}}1
+             {ã}{{\~a}}1 {õ}{{\~o}}1
+             {Ã}{{\~A}}1 {Õ}{{\~O}}1
+             {ç}{{\c{c}}}1 {Ç}{{\c{C}}}1,
+}
+\lstset{style=cppstyle} % Define o estilo C++ como padrão para listings
+
+% Configuração do idioma principal do documento
+\selectlanguage{portuguese}
+
+% --- INFORMAÇÕES DO DOCUMENTO ---
+\title{
+    \includegraphics[width=0.4\textwidth]{imagens/ua.pdf} \\ \vspace{1.5cm}
+    \textbf{Relatório do Trabalho Laboratorial nº 3} \\
+    \large Informação e Codificação (2025/26)
+}
+\author{
+    \textbf{Pedro Miguel Miranda de Melo} (114208) \\
+    \textbf{Rúben Cardeal Costa} (114190) \\
+    \textbf{Hugo Marques Dias} (114142) \\
+    % Adicionar mais linhas conforme necessário
+    \textit{Departamento de Eletrónica, Telecomunicações e Informática (DETI)} \\
+    \textit{Universidade de Aveiro}
+}
+\date{Novembro de 2025}
+
+% --- INÍCIO DO DOCUMENTO ---
+\begin{document}
+
+\maketitle
+\thispagestyle{empty} % Remove número de página na folha de rosto
+
+\newpage
+\tableofcontents % Gera o índice automaticamente
+\newpage
+
+% ----------------------------------------------------------------------------------
+% SECÇÃO 1: INTRODUÇÃO
+% ----------------------------------------------------------------------------------
+\section{Introdução}
+O presente relatório técnico descreve o trabalho realizado no âmbito do projeto de compressão de um Grande Modelo de Linguagem (LLM). O objetivo central passa por desenvolver uma estratégia de compressão otimizada e eficiente para o ficheiro \texttt{model.safetensors} ($\sim 1\text{ GB}$) que contém os parâmetros de um LLM.\colorbox{yellow}{Continuar...}
+
+
+
+
+% ----------------------------------------------------------------------------------
+% SECÇÃO 2: PARTE I - MANIPULAÇÃO DE IMAGENS COM OPENCV
+% ----------------------------------------------------------------------------------
+\section{Análise e Caracterização da Fonte}
+Antes de aplicar qualquer algoritmo de compressão, procedeu-se a uma análise estrutural e estatística do ficheiro para determinar a natureza dos dados e os limites teóricos de compressão.
+
+\subsection{Estrutura do Ficheiro (\texttt{safetensors})}
+Através de engenharia reversa e análise do cabeçalho, determinou-se que o formato \texttt{safetensors} consiste num bloco de memória contíguo dividido em três secções:
+\begin{enumerate}
+    \item \textbf{Tamanho do Cabeçalho:} Os primeiros $8$ bytes (inteiro de $64$ bits) indicam o tamanho da secção seguinte.
+    \item \textbf{Metadados (JSON):} Um cabeçalho descritivo contendo o nome, forma (\textit{shape}) e tipo de dados (\textit{dtype}) de cada tensor.
+    \item \textbf{Payload Binário:} A grande maioria do ficheiro consiste nos valores numéricos dos tensores concatenados.
+\end{enumerate}
+
+A inspeção do JSON revelou que todos os tensores estão armazenados no formato \textbf{BF16} (\textit{Brain Floating Point 16}). Ao contrário de um fluxo de bytes de texto ou imagem genérica, isto indica que o ficheiro é composto por sequências de números de $16$ bits ($2$ bytes).
+
+O formato BF16 segue a estrutura:
+\begin{itemize}
+    \item $1$ bit: Sinal.
+    \item $8$ bits: Expoente.
+    \item $7$ bits: Mantissa.
+\end{itemize}
+
+Esta descoberta é fundamental, pois sugere uma correlação estrutural entre bytes alternados (\textit{Byte Alto} vs. \textit{Byte Baixo}), que seria ignorada se o ficheiro fosse tratado como um fluxo de bytes uniforme ($x(n)\in\{0,...,255\}$).
+
+\subsection{Análise Teórica da Informação}
+Para quantificar o limite teórico de compressão, recorreu-se à definição de Entropia de Shannon, dada por:
+$$
+H(X) = - \sum_{i} P(x_i) \log_2 P(x_i)
+$$
+onde $P(x_i)$ é a probabilidade de ocorrência do símbolo $x_i$.
+
+Dado que o ficheiro é constituído por valores BF16, formulou-se a hipótese de que a entropia não está uniformemente distribuída pelos $16$ bits.
+\begin{itemize}
+    \item \textbf{Byte Mais Significativo (MSB):} Contém o sinal e a maioria do expoente. Num modelo treinado, os pesos tendem a seguir uma distribuição normal centrada em zero, o que implica que os expoentes são altamente repetitivos (baixa entropia).
+    \item \textbf{Byte Menos Significativo (LSB):} Contém a mantissa. Devido à precisão numérica, espera-se que estes bits apresentem um comportamento ruidoso, aproximando-se de uma distribuição uniforme (alta entropia).
+\end{itemize}
+
+\subsection{Resultados Experimentais}
+Para validar a hipótese, implementou-se uma ferramenta de análise que separa o ficheiro em dois fluxos distintos (\textit{Byte-Splitting}) e calcula a entropia de ordem-0 para cada um. Os resultados obtidos foram:
+
+\begin{table}[htbp]
+    \centering
+    \caption{Resultados do Cálculo da Entropia de Ordem-0}
+    \label{tab:entropia}
+    \begin{tabular}{llccc}
+        \toprule
+        \textbf{Fluxo de Dados} & \textbf{Conteúdo Principal} & \textbf{Entropia Calculada ($H$)} & \textbf{Redundância ($8-H$)} \\
+        \midrule
+        LSB (Byte Baixo) & Mantissa (Precisão) & $7.96$ bits/byte & $\sim 0.04$ bits \\
+        MSB (Byte Alto) & Expoente + Sinal & $2.71$ bits/byte & $\sim 5.29$ bits \\
+        \midrule
+        Média Combinada & Ficheiro Completo & $5.34$ bits/byte & $\sim 2.66$ bits \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsubsection*{Interpretação dos Resultados:}
+\begin{itemize}
+    \item \textbf{O Fluxo LSB é Incompressível:} Com uma entropia de $\approx 7.96$ bits, este fluxo está muito próximo da entropia máxima de uma fonte uniforme ($H_{\text{max}}=\log_2 256=8$ bits). A aplicação de algoritmos de compressão complexos aqui resultaria num ganho negligenciável, desperdiçando tempo de computação.
+    \item \textbf{O Fluxo MSB é Altamente Compressível:} A entropia de $2.71$ bits indica uma redundância estatística significativa. Isto confirma que a estratégia de compressão deve focar-se agressivamente neste fluxo.
+    \item \textbf{Ganho com \textit{Byte-Splitting}:} Se comprimíssemos o ficheiro original sem separação, a entropia média seria de $5.34$ bits. Ao separar, isolamos o ``ruído'' num fluxo e a ``informação estruturada'' noutro, permitindo a aplicação de algoritmos otimizados para cada caso.
+\end{itemize}
+
+\subsection{Definição da Estratégia de Compressão}
+Com base nesta análise, a arquitetura do compressor a desenvolver seguirá uma abordagem híbrida:
+
+\begin{itemize}
+    \item \textbf{Pré-processamento:} Separação dos dados em dois \textit{streams} (MSB e LSB).
+    \item \begin{tcolorbox}[colback=yellow, boxrule=0pt, arc=0pt, left=0pt, right=0pt, top=0pt, bottom=0pt]
+    \textbf{Codificação do LSB:} Armazenamento direto (\textit{raw}) ou uso de um algoritmo leve (ex: RLE apenas para zeros), dado que $H\approx 8$.
+    \end{tcolorbox}
+
+    \item \begin{tcolorbox}[colback=yellow, boxrule=0pt, arc=0pt, left=0pt, right=0pt, top=0pt, bottom=0pt]
+    \textbf{Codificação do MSB:}
+    \begin{enumerate}
+        \item Aplicação de Codificação Preditiva ($r_n = x_n - \hat{x}_n$) para tentar reduzir a entropia abaixo de $2.71$ bits, explorando a correlação entre pesos adjacentes.
+        \item Uso de Codificação de Entropia (Huffman ou Aritmética) para atingir o limite teórico calculado.
+    \end{enumerate}
+    \end{tcolorbox}
+\end{itemize}
+
+Esta estratégia visa maximizar o rácio de compressão onde ele é possível (MSB) e minimizar o uso de recursos onde o ganho é marginal (LSB), permitindo um equilíbrio entre a eficiência da compressão e a complexidade computacional.
+
+
+
+% ----------------------------------------------------------------------------------
+% SECÇÃO 6: CONCLUSÕES
+% ----------------------------------------------------------------------------------
+\section{Conclusões}
+
+
+\end{document}
