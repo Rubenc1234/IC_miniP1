@@ -189,6 +189,62 @@ Com base nestes dados teóricos e experimentais, a estratégia de compressão se
 \end{tcolorbox}
 
 % ----------------------------------------------------------------------------------
+% SECÇÃO 3: IMPLEMENTAÇÃO DO CODEC (CANAL MSB)
+% ----------------------------------------------------------------------------------
+\section{Implementação e Otimização do Canal MSB}
+
+Com base na análise preliminar, o canal MSB (Byte Mais Significativo) apresentava uma entropia de base de $2.70$ bits/byte, tornando-se o foco principal para ganhos de compressão. Esta secção descreve o processo iterativo de otimização, desde as tentativas de modelação preditiva até à seleção do codificador de entropia final.
+
+\subsection{Avaliação de Técnicas de Transformação Preditiva}
+A literatura de compressão de dados (e.g., JPEG Lossless, Audio Coding) sugere frequentemente o uso de codificação preditiva para reduzir a variância dos resíduos em sinais correlacionados. Testaram-se duas abordagens para explorar a correlação sequencial entre os pesos do modelo.
+
+\subsubsection{Abordagem 1: Preditor Linear Aritmético (Delta)}
+A primeira tentativa utilizou um preditor de primeira ordem clássico, onde o resíduo $r_n$ é calculado pela diferença aritmética entre o byte atual $x_n$ e o anterior $x_{n-1}$:
+\begin{equation}
+    r_n = (x_n - x_{n-1}) \mod 256
+\end{equation}
+\textbf{Resultado:} Contrariamente ao esperado, a aplicação deste preditor \textbf{aumentou} a entropia do canal MSB de $2.70$ para $3.28$ bits/byte (um ganho negativo de $-0.58$ bits).
+
+\textbf{Análise de Falha:} A inspeção dos dados revelou que este comportamento se deve ao formato \texttt{BF16}. O bit mais significativo do MSB corresponde ao \textit{Sinal}. Quando os pesos da rede neuronal oscilam entre valores pequenos positivos e negativos (comum em LLMs), o bit de sinal alterna (e.g., de $0$ para $1$), o que a subtração aritmética interpreta como um "salto"\ numérico de grande magnitude (e.g., $+128$), dispersando o histograma dos resíduos.
+
+\subsubsection{Abordagem 2: Preditor Lógico (XOR)}
+Para mitigar o problema do bit de sinal, implementou-se um preditor baseado na operação exclusiva-ou (XOR), comum em compressores de ponto flutuante como o FPC, para capturar semelhanças de padrões de bits independentemente do valor aritmético:
+\begin{equation}
+    r_n = x_n \oplus x_{n-1}
+\end{equation}
+\textbf{Resultado:} Embora tenha apresentado um desempenho superior ao preditor aritmético, a entropia resultante foi de $3.11$ bits/byte, ainda superior à entropia original de $2.70$ bits.
+
+\subsubsection{Decisão de Engenharia}
+Concluiu-se que a baixa entropia do canal MSB ($2.70$ bits) não advém da correlação sequencial imediata ($x_n \approx x_{n-1}$), mas sim da distribuição global dos expoentes (distribuição bimodal estática). Qualquer tentativa de transformação preditiva simples tende a destruir esta estrutura estatística favorável.
+Consequentemente, optou-se por \textbf{não aplicar transformações} e codificar diretamente os valores brutos do canal MSB.
+
+\subsection{Codificação de Entropia: Huffman vs. Aritmética}
+Após definir que os dados seriam codificados sem transformação prévia, comparou-se o desempenho de dois algoritmos de entropia para o passo final de compressão.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Comparação de Desempenho no Ficheiro Completo (Canal MSB)}
+    \label{tab:entropy_bench}
+    \begin{tabular}{lccc}
+        \toprule
+        \textbf{Algoritmo} & \textbf{Tamanho Final} & \textbf{Tempo Total} & \textbf{Rácio Efetivo} \\
+        \midrule
+        Huffman (Estático) & 633.04 MB & \textbf{13.98 s} & 1.58:1 \\
+        Aritmético (Estático) & \textbf{631.00 MB} & 19.07 s & 1.59:1 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+A Codificação Aritmética permitiu uma redução adicional de $\approx 2$ MB. Teoricamente, isto deve-se à sua capacidade de alocar um número fracionário de bits por símbolo, aproximando-se do limite da entropia ($2.70$), enquanto o Huffman é penalizado pela restrição de usar números inteiros de bits. Contudo, este ganho marginal ($0.3\%$) implicou um custo computacional de $36\%$ no tempo de execução.
+
+\subsection{Definição dos Modos de Operação}
+Para cumprir os requisitos de projeto que exigem diferentes pontos de operação (compromisso tempo/compressão), definiram-se dois modos no compressor final:
+
+\begin{itemize}
+    \item \textbf{Modo \textit{Fast}:} Utiliza o algoritmo de \textbf{Huffman}. Prioriza a velocidade de processamento, ideal para cenários de inferência em tempo real ou carregamento rápido de modelos.
+    \item \textbf{Modo \textit{Best}:} Utiliza a \textbf{Codificação Aritmética}. Prioriza a minimização absoluta do espaço em disco, ideal para arquivo ou distribuição em redes com largura de banda limitada.
+\end{itemize}
+% ----------------------------------------------------------------------------------
 % SECÇÃO 6: CONCLUSÕES
 % ----------------------------------------------------------------------------------
 \section{Conclusões}

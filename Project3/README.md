@@ -101,19 +101,19 @@ Os executáveis encontram-se na pasta `bin/`. Execute-os a partir da raiz do pro
 **Extrair Cabeçalho:**
 
 ```bash
-./bin/01_extract_header data/model.safetensors output/header.json
+./bin/01_extract_header
 ```
 
 **Calcular Estatísticas Globais:**
 
 ```bash
-./bin/02_calc_global data/model.safetensors output/global_stats.json
+./bin/02_calc_global
 ```
 
 **Analisar Divisão de Bytes:**
 
 ```bash
-./bin/03_analyze_split data/model.safetensors output/byte_analysis.json
+./bin/03_analyze_split
 ```
 
 **Gerar Gráficos com Gnuplot:**

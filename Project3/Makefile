@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++11 -O2 -Wall
 
-TARGETS = bin/01_extract_header bin/02_calc_global bin/03_analyze_split
+TARGETS = bin/01_extract_header bin/02_calc_global bin/03_analyze_split bin/encoder_core
 
 all: | build output bin $(TARGETS)
 
@@ -21,6 +21,9 @@ bin/02_calc_global: src/02_calc_global.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 bin/03_analyze_split: src/03_analyze_split.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+bin/encoder_core: src/encoder_core.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 

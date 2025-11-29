@@ -4,6 +4,10 @@ build/
 
 model.safetensors
 
+output/
+
+data/
+
 # Ficheiros objeto (se viessem a usar compilação separada)
 *.o
 
