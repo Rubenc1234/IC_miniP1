@@ -1,0 +1,42 @@
+Benchmarking de Compressão – Modelo: model.safetensors
+======================================================
+
+1. GZIP - nível 1
+-----------------
+Tamanho final: 754 MB
+Tempo compressão: 0:39.92 (real)
+Tempo descompressão: 0:10.93 (real)
+Pico de RAM (compressão): 1,920 KB
+Pico de RAM (descompressão): 1,792 KB
+
+2. GZIP - nível 9
+-----------------
+Tamanho final: 746 MB
+Tempo compressão: 1:43.94 (real)
+Tempo descompressão: 0:08.51 (real)
+Pico de RAM (compressão): 1,920 KB
+Pico de RAM (descompressão): 1,792 KB
+
+3. BZIP2
+--------
+Tamanho final: 654 MB
+Tempo compressão: 1:34.12 (real)
+Tempo descompressão: 0:49.31 (real)
+Pico de RAM (compressão): 7,808 KB
+Pico de RAM (descompressão): 4,864 KB
+
+4. XZ - nível 9
+---------------
+Tamanho final: 660 MB
+Tempo compressão: 15:33.07 (real)
+Tempo descompressão: 0:34.61 (real)
+Pico de RAM (compressão): 691,456 KB
+Pico de RAM (descompressão): 67,584 KB
+
+5. ZSTD - nível 1
+-----------------
+Tamanho final: 733 MB
+Tempo compressão: 0:03.35 (real)
+Tempo descompressão: 0:01.18 (real)
+Pico de RAM (compressão): 15,488 KB
+Pico de RAM (descompressão): 4,480 KB

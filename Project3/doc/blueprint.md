@@ -17,8 +17,8 @@
 *Objetivo: Estabelecer as métricas a bater.*
 
 * **Objetivo 2.1: Testes com Compressores Padrão:**
-    * [ ] Executar `gzip` (níveis -1 e -9), `bzip2`, `xz` e `zstd` sobre o ficheiro original.
-    * [ ] Registar: Tamanho Final, Tempo de Compressão/Descompressão, Pico de RAM.
+    * [x] Executar `gzip` (níveis -1 e -9), `bzip2`, `xz` e `zstd` sobre o ficheiro original.
+    * [x] Registar: Tamanho Final, Tempo de Compressão/Descompressão, Pico de RAM.
 * **Objetivo 2.2: Testes Específicos (Opcional):**
     * [ ] Testar ferramentas especializadas em floats (`fpzip` ou `zfp`) apenas para comparação teórica, se houver tempo.
 
