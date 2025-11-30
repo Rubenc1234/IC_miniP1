@@ -14,3 +14,5 @@ data/
 # Ficheiros temporários de editores
 *~
 .vscode/
+
+logs/

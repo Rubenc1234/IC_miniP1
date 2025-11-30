@@ -39,12 +39,12 @@
         * Implementado **Aritmética Estática** (Modo Best): ~631 MB.
 
 * **3.3 Compressão do Canal LSB (Tarefa Pendente - Colega):**
-    * [ ] **Implementar RLE Simples:** Detetar apenas sequências de zeros (comum em *sparsity*).
-    * [ ] **Fallback:** Se o RLE aumentar o tamanho, manter cópia direta (*Raw Copy*).
+    * [x] **Implementar RLE Simples:** Detetar apenas sequências de zeros (comum em *sparsity*).
+    * [x] **Fallback:** Se o RLE aumentar o tamanho, manter cópia direta (*Raw Copy*).
 
 * **3.4 Empacotamento e Descodificação:**
-    * [ ] **Formato de Ficheiro (.sc):** Definido como `[Header Tamanho][Tabela Freq][Bitstream MSB][Dados LSB]`.
-    * [ ] **Decoder:** Falta criar o `decoder.cpp` para inverter o processo e reconstruir o `.safetensors` original (prova de conceito).
+    * [x] **Formato de Ficheiro (.sc):** Definido como `[Header Tamanho][Tabela Freq][Bitstream MSB][Dados LSB]`.
+    * [x] **Decoder:** Falta criar o `decoder.cpp` para inverter o processo e reconstruir o `.safetensors` original (prova de conceito).
 
 ---
 
@@ -52,8 +52,8 @@
 *Objetivo: Criar as variantes "Fast" vs "Best" exigidas no enunciado.*
 
 * **Objetivo 4.1: Tuning de Parâmetros:**
-    * [ ] **Modo "Fast":** Split + Delta (MSB) + Huffman Estático + LSB Raw.
-    * [ ] **Modo "Best":** Split + Delta (MSB) + Aritmética Adaptativa + LSB (tentativa LZ).
+    * [x] **Modo "Fast":** Split + Huffman Estático + LSB Raw.
+    * [x] **Modo "Best":** Split + Aritmética Adaptativa + LSB (tentativa LZ).
 * **Objetivo 4.2: Gestão de Memória:**
     * [ ] Refinar o tamanho dos *chunks* de leitura para garantir que o compressor funciona em máquinas com pouca RAM.
 
