@@ -390,6 +390,112 @@ std::vector<uint8_t> decodeLsb(const std::vector<uint8_t>& compressed, bool isBe
 }
 
 // ============================================================================
+// CLASSE: rANS DECODER (Modo Fast+ANS)
+// ============================================================================
+
+class RansDecoder {
+public:
+    static constexpr uint32_t RANS_L = 1u << 16;  // limite clássico (65536)
+
+    std::vector<uint32_t> freq;      // 256 entradas
+    std::vector<uint32_t> cumFreq;   // 257 entradas
+    uint32_t total;                  // soma = 4096 (ou o que vier do encoder)
+
+    struct DecodeEntry {
+        uint8_t symbol;
+        uint32_t freq;
+        uint32_t start;
+    };
+
+    std::vector<DecodeEntry> decodeTable; // tabela de lookup com total entries
+
+    // ---------------------------------------------------------
+    // Reconstroi a tabela ANS a partir do header (1024 bytes)
+    // ---------------------------------------------------------
+    void rebuildModel(const uint8_t* freqTableData) {
+        freq.resize(256);
+        cumFreq.resize(257);
+
+        const uint32_t* f = reinterpret_cast<const uint32_t*>(freqTableData);
+
+        // Frequências do encoder
+        total = 0;
+        for (int i = 0; i < 256; ++i) {
+            freq[i] = f[i];
+            total += freq[i];
+        }
+
+        // Construir cumulativos
+        uint32_t acc = 0;
+        for (int i = 0; i < 256; i++) {
+            cumFreq[i] = acc;
+            acc += freq[i];
+        }
+        cumFreq[256] = acc;
+
+        // Construir tabela de lookup (tamanho = total)
+        decodeTable.resize(total);
+
+        // Para cada símbolo, preencher o intervalo correspondente
+        for (int s = 0; s < 256; ++s) {
+            uint32_t begin = cumFreq[s];
+            uint32_t end   = cumFreq[s] + freq[s];
+
+            for (uint32_t i = begin; i < end; i++) {
+                decodeTable[i].symbol = (uint8_t)s;
+                decodeTable[i].freq   = freq[s];
+                decodeTable[i].start  = cumFreq[s];
+            }
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Função de leitura do stream (little-endian)
+    // ---------------------------------------------------------
+    uint32_t read32(const uint8_t* d, size_t& idx) {
+        uint32_t v = 
+            (uint32_t)d[idx] |
+            ((uint32_t)d[idx+1] << 8) |
+            ((uint32_t)d[idx+2] << 16) |
+            ((uint32_t)d[idx+3] << 24);
+        idx += 4;
+        return v;
+    }
+
+    // ---------------------------------------------------------
+    // DESCODIFICAÇÃO rANS (reverse-order)
+    // ---------------------------------------------------------
+    std::vector<uint8_t> decode(const uint8_t* data, size_t size, size_t expectedSymbols) {
+        std::vector<uint8_t> out(expectedSymbols);
+
+        size_t idx = 0;
+
+        // 1) Ler estado inicial
+        uint32_t state = read32(data, idx);
+
+        // 2) Começar pelos últimos símbolos (encoder codifica ao contrário)
+        for (size_t pos = expectedSymbols; pos-- > 0;) {
+            uint32_t slot = state % total;
+            const DecodeEntry& e = decodeTable[slot];
+
+            out[pos] = e.symbol;
+
+            // Atualização ANS
+            state = e.freq * (state / total) + (slot - e.start);
+
+            // Refill enquanto o estado estiver demasiado baixo
+            while (state < RANS_L) {
+                if (idx >= size) break;
+                state = (state << 8) | data[idx++];
+            }
+        }
+
+        return out;
+    }
+};
+
+
+// ============================================================================
 // UTILITÁRIOS
 // ============================================================================
 
@@ -484,13 +590,14 @@ int main(int argc, char* argv[]) {
     uint8_t modeFlag = 0;
     inputFile.read(reinterpret_cast<char*>(&modeFlag), 1);
     bool useBestMode = (modeFlag == 1);
+    bool useRansMode = (modeFlag == 2);
 
     std::cout << "═══════════════════════════════════════════════════════\n";
     std::cout << "  DECODER SafeTensors\n";
     std::cout << "═══════════════════════════════════════════════════════\n";
     std::cout << "  Input:  " << inputPath << "\n";
     std::cout << "  Output: " << outputPath << "\n";
-    std::cout << "  Modo:   " << (useBestMode ? "BEST (Aritmética + RLE)" : "FAST (Huffman + Raw)") << "\n";
+    std::cout << "  Modo:   " << (useRansMode ? "RANS (rANS + Raw)" : (useBestMode ? "BEST (Aritmética + RLE)" : "FAST (Huffman + Raw)")) << "\n";
     std::cout << "═══════════════════════════════════════════════════════\n";
 
     // ========================================
@@ -523,6 +630,14 @@ int main(int argc, char* argv[]) {
 
         if (useBestMode) {
             ArithmeticDecoder decoder;
+            decoder.rebuildModel(msbCompressed.data());
+            msbRaw = decoder.decode(
+                msbCompressed.data() + Config::FREQ_TABLE_SIZE,
+                msbSize - Config::FREQ_TABLE_SIZE,
+                numSamples
+            );
+        } else if (useRansMode) {
+            RansDecoder decoder;
             decoder.rebuildModel(msbCompressed.data());
             msbRaw = decoder.decode(
                 msbCompressed.data() + Config::FREQ_TABLE_SIZE,

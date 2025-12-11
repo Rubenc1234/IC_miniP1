@@ -10,6 +10,7 @@
 #include <iomanip>
 #include <string>
 #include <cstring>
+#include <algorithm>
 
 // Configurações
 const size_t BLOCK_SIZE = 1024 * 1024; // 1 MB por bloco
@@ -124,6 +125,8 @@ private:
     }
 };
 
+
+
 // ==========================================
 // MÓDULO LSB: RLE (Apenas para modo Best)
 // ==========================================
@@ -156,16 +159,169 @@ std::vector<uint8_t> encode_lsb_rle(const std::vector<uint8_t>& data) {
     return final_out;
 }
 
+
+// ==========================================
+// MÓDULO MSB: rANS (Apenas para modo Best)
+// ==========================================
+class AssymetricalNumericalSystem {
+public:
+    // Parâmetros do codificador
+    static constexpr uint32_t TOT = 1u << 12; // 4096
+    static constexpr uint32_t SHIFT = 12;     // log2(TOT)
+
+    // Tabelas construídas em build()
+    std::vector<uint32_t> freq;       // frequências originais (32-bit)
+    std::vector<uint32_t> norm_freq;  // frequências normalizadas (somam TOT)
+    std::vector<uint32_t> cumul;      // cumulativas (size 257)
+    std::vector<uint8_t> symtab;      // tabela de símbolo para decoder (size TOT)
+
+    AssymetricalNumericalSystem() {}
+
+    // Constrói as tabelas a partir dos dados (histograma)
+    void build(const std::vector<uint8_t>& data) {
+        // Conta frequências originais (32-bit)
+        freq.assign(256, 0);
+        for (uint8_t b : data) freq[b]++;
+
+        // Normalizar freq -> norm_freq com soma EXACTA = TOT
+        normalize_freq();
+        // Construir cumulativas e symtab para decoder
+        build_cumul_and_symtab();
+    }
+
+    // Compress: retorna buffer com [freq_table(256*4 bytes)] + [rANS payload]
+    std::vector<uint8_t> compress(const std::vector<uint8_t>& data) {
+        std::vector<uint8_t> out;
+
+        // 1) Serializar freq original (256 * 4 bytes little-endian) para compatibilidade
+        for (int i = 0; i < 256; ++i) {
+            uint32_t f = freq[i];
+            out.push_back(static_cast<uint8_t>(f & 0xFF));
+            out.push_back(static_cast<uint8_t>((f >> 8) & 0xFF));
+            out.push_back(static_cast<uint8_t>((f >> 16) & 0xFF));
+            out.push_back(static_cast<uint8_t>((f >> 24) & 0xFF));
+        }
+
+        // 2) rANS encode (bytewise, reverse order)
+        std::vector<uint8_t> payload;
+        payload.reserve(data.size() / 2); // heuristic
+
+        // Initial state: use a 64-bit state.
+        uint64_t state = (1ULL << 32); // initial large state >= 2^32
+
+        // Encode symbols in reverse order
+        for (int idx = (int)data.size() - 1; idx >= 0; --idx) {
+            uint8_t s = data[idx];
+            uint32_t f = norm_freq[s];
+            uint32_t start = cumul[s];
+
+            // Renormalize: emit bytes while state is too large for this freq
+            // Condition chosen empirically: while state >= (f << 32)
+            // (keeps arithmetic safe and ensures decoder can renormalize)
+            while (state >= ( (uint64_t)f << 32 )) {
+                payload.push_back(static_cast<uint8_t>(state & 0xFF));
+                state >>= 8;
+            }
+
+            // rANS encode step (bytewise variant)
+            uint64_t q = state / f;
+            uint64_t r = state % f;
+            state = (q << SHIFT) + r + start;
+        }
+
+        // Flush remaining state bytes (LSB-first)
+        while (state > 0) {
+            payload.push_back(static_cast<uint8_t>(state & 0xFF));
+            state >>= 8;
+        }
+
+        // rANS writes backwards, so reverse payload bytes
+        std::reverse(payload.begin(), payload.end());
+
+        // 3) Append payload to out and return
+        out.insert(out.end(), payload.begin(), payload.end());
+        return out;
+    }
+
+private:
+    // Normalização simples: escala e depois corrige para somar exatamente TOT
+    void normalize_freq() {
+        norm_freq.assign(256, 0);
+
+        // Total real
+        uint64_t total = 0;
+        for (int i = 0; i < 256; ++i) total += freq[i];
+        if (total == 0) {
+            // Bloco vazio: tudo zero (evitar div by zero)
+            // dar 1 a um símbolo arbitrário para estabilidade
+            norm_freq[0] = TOT;
+            return;
+        }
+
+        // Scaling (floor) e garantir pelo menos 1 para símbolos presentes
+        double scale = static_cast<double>(TOT) / static_cast<double>(total);
+        uint32_t sum = 0;
+        for (int i = 0; i < 256; ++i) {
+            if (freq[i] == 0) { norm_freq[i] = 0; continue; }
+            uint32_t v = static_cast<uint32_t>(std::floor(freq[i] * scale));
+            if (v == 0) v = 1;
+            norm_freq[i] = v;
+            sum += v;
+        }
+
+        // Corrigir diferenças devido a arredondamento
+        // Se soma menor que TOT, incrementa símbolos com maior original freq
+        if (sum < TOT) {
+            // Build array of indices sorted by original freq desc
+            std::vector<int> idx(256);
+            for (int i = 0; i < 256; ++i) idx[i] = i;
+            std::sort(idx.begin(), idx.end(), [&](int a, int b){ return freq[a] > freq[b]; });
+            size_t p = 0;
+            while (sum < TOT) {
+                int s = idx[p % 256];
+                // preferir símbolos que existem (freq>0)
+                if (freq[s] > 0) { norm_freq[s]++; sum++; }
+                p++;
+            }
+        } else if (sum > TOT) {
+            // reduzir símbolos com menor impacto (freq small)
+            std::vector<int> idx(256);
+            for (int i = 0; i < 256; ++i) idx[i] = i;
+            std::sort(idx.begin(), idx.end(), [&](int a, int b){ return freq[a] < freq[b]; });
+            size_t p = 0;
+            while (sum > TOT) {
+                int s = idx[p % 256];
+                if (norm_freq[s] > 1) { norm_freq[s]--; sum--; }
+                p++;
+            }
+        }
+        // agora sum == TOT
+    }
+
+    void build_cumul_and_symtab() {
+        cumul.assign(257, 0);
+        for (int i = 0; i < 256; ++i) cumul[i+1] = cumul[i] + norm_freq[i];
+        symtab.assign(TOT, 0);
+        for (int s = 0; s < 256; ++s) {
+            for (uint32_t pos = cumul[s]; pos < cumul[s+1]; ++pos) {
+                symtab[pos] = static_cast<uint8_t>(s);
+            }
+        }
+    }
+};
+
+
 // ==========================================
 // MAIN LOOP
 // ==========================================
 int main(int argc, char* argv[]) {
     if (argc < 3) {
-        std::cout << "Uso: ./encoder_core <input> <output> [mode: fast|best]" << std::endl;
+        std::cout << "Uso: ./encoder_core <input> <output> [mode: fast|best|Rans]" << std::endl;
         return 1;
     }
     std::string in_p = argv[1], out_p = argv[2], mode = (argc > 3) ? argv[3] : "fast";
     bool use_best = (mode == "best");
+    bool use_rans = (mode == "Rans");
 
     std::ifstream in(in_p, std::ios::binary); std::ofstream out(out_p, std::ios::binary);
     if (!in || !out) return 1;
@@ -175,12 +331,11 @@ int main(int argc, char* argv[]) {
     std::vector<char> h_json(h_sz); in.read(h_json.data(), h_sz); out.write(h_json.data(), h_sz);
 
     // 2. Gravar Flag Global de Modo
-    // 0 = Fast (Huffman + LSB Raw Puro), 1 = Best (Arithmetic + LSB Híbrido)
-    uint8_t mode_flag = use_best ? 1 : 0;
+    // 0 = Fast (Huffman + LSB Raw Puro), 1 = Best (Arithmetic + LSB Híbrido), 2 = Rans (rANS + LSB Raw Puro)
+    uint8_t mode_flag = use_rans ? 2 : (use_best ? 1 : 0);
     out.write((char*)&mode_flag, 1);
 
-    std::cout << "Modo: " << (use_best ? "BEST (Aritmetica + LSB RLE)" : "FAST (Huffman + LSB Raw Puro)") << std::endl;
-
+    std::cout << "Modo: " << (use_rans ? "RANS (rANS + LSB Raw Puro)" : (use_best ? "BEST (Aritmetica + LSB RLE)" : "FAST (Huffman + LSB Raw Puro)")) << std::endl;
     std::vector<char> buf(BLOCK_SIZE);
     std::vector<uint8_t> msb, lsb;
     uint64_t tin = 0, tout = 0;
@@ -197,6 +352,7 @@ int main(int argc, char* argv[]) {
         // --- Processar MSB ---
         std::vector<uint8_t> msb_enc;
         if (use_best) { ArithmeticCodec ac; ac.build(msb); msb_enc = ac.compress(msb); }
+        else if (use_rans) { AssymetricalNumericalSystem rc; rc.build(msb); msb_enc = rc.compress(msb); }
         else          { HuffmanCodec hc; hc.build(msb); msb_enc = hc.compress(msb); }
 
         // --- Processar LSB (CORRIGIDO) ---
