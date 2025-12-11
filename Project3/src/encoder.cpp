@@ -82,35 +82,26 @@ private:
 // ==========================================
 class AssymetricalNumericalSystem {
 public:
-    // Parâmetros do codificador
-    static constexpr uint32_t TOT = 1u << 12; // 4096
-    static constexpr uint32_t SHIFT = 12;     // log2(TOT)
+    static constexpr uint32_t TOT = 1u << 12;
+    static constexpr uint32_t SHIFT = 12;
+    static constexpr uint64_t LOWER = 1ULL << 32;
+    static constexpr uint64_t UPPER = 1ULL << 40;
 
-    // Tabelas construídas em build()
-    std::vector<uint32_t> freq;       // frequências originais (32-bit)
-    std::vector<uint32_t> norm_freq;  // frequências normalizadas (somam TOT)
-    std::vector<uint32_t> cumul;      // cumulativas (size 257)
-    std::vector<uint8_t> symtab;      // tabela de símbolo para decoder (size TOT)
+    std::vector<uint32_t> freq;
+    std::vector<uint32_t> norm_freq;
+    std::vector<uint32_t> cumul;
 
-    AssymetricalNumericalSystem() {}
-
-    // Constrói as tabelas a partir dos dados (histograma)
     void build(const std::vector<uint8_t>& data) {
-        // Conta frequências originais (32-bit)
         freq.assign(256, 0);
         for (uint8_t b : data) freq[b]++;
-
-        // Normalizar freq -> norm_freq com soma EXACTA = TOT
         normalize_freq();
-        // Construir cumulativas e symtab para decoder
-        build_cumul_and_symtab();
+        build_cumul();
     }
 
-    // Compress: retorna buffer com [freq_table(256*4 bytes)] + [rANS payload]
     std::vector<uint8_t> compress(const std::vector<uint8_t>& data) {
         std::vector<uint8_t> out;
 
-        // 1) Serializar freq original (256 * 4 bytes little-endian) para compatibilidade
+        // 1) Serializar freq original (256 * 4 bytes little-endian)
         for (int i = 0; i < 256; ++i) {
             uint32_t f = freq[i];
             out.push_back(static_cast<uint8_t>(f & 0xFF));
@@ -119,92 +110,75 @@ public:
             out.push_back(static_cast<uint8_t>((f >> 24) & 0xFF));
         }
 
-        // 2) rANS encode (bytewise, reverse order)
+        // 2) rANS encode
         std::vector<uint8_t> payload;
-        payload.reserve(data.size() / 2); // heuristic
+        payload.reserve(data.size());
 
-        // Initial state: use a 64-bit state.
-        uint64_t state = (1ULL << 32); // initial large state >= 2^32
+        uint64_t state = LOWER; // estado inicial
 
-        // Encode symbols in reverse order
-        for (int idx = (int)data.size() - 1; idx >= 0; --idx) {
-            uint8_t s = data[idx];
+        // Encode em ordem reversa
+        for (size_t i = data.size(); i-- > 0; ) {
+            uint8_t s = data[i];
             uint32_t f = norm_freq[s];
             uint32_t start = cumul[s];
 
-            // Renormalize: emit bytes while state is too large for this freq
-            // Condition chosen empirically: while state >= (f << 32)
-            // (keeps arithmetic safe and ensures decoder can renormalize)
-            while (state >= ( (uint64_t)f << 32 )) {
-                payload.push_back(static_cast<uint8_t>(state & 0xFF));
+            // Renormalizar ANTES de codificar: se state >= f * UPPER / TOT, emite bytes
+            uint64_t threshold = ((UPPER >> SHIFT) * f);
+            while (state >= threshold) {
+                payload.push_back(state & 0xFF);
                 state >>= 8;
             }
 
-            // rANS encode step (bytewise variant)
-            uint64_t q = state / f;
-            uint64_t r = state % f;
-            state = (q << SHIFT) + r + start;
+            // Codificar símbolo
+            // state' = (state / f) * TOT + (state % f) + start
+            state = ((state / f) << SHIFT) + (state % f) + start;
         }
 
-        // Flush remaining state bytes (LSB-first)
+        // Flush estado final (4-8 bytes)
         while (state > 0) {
-            payload.push_back(static_cast<uint8_t>(state & 0xFF));
+            payload.push_back(state & 0xFF);
             state >>= 8;
         }
 
-        // rANS writes backwards, so reverse payload bytes
+        // Reverter payload (porque escrevemos ao contrário)
         std::reverse(payload.begin(), payload.end());
 
-        // 3) Append payload to out and return
         out.insert(out.end(), payload.begin(), payload.end());
         return out;
     }
 
 private:
-    // Normalização simples: escala e depois corrige para somar exatamente TOT
     void normalize_freq() {
         norm_freq.assign(256, 0);
-
-        // Total real
         uint64_t total = 0;
         for (int i = 0; i < 256; ++i) total += freq[i];
-        if (total == 0) {
-            // Bloco vazio: tudo zero (evitar div by zero)
-            // dar 1 a um símbolo arbitrário para estabilidade
-            norm_freq[0] = TOT;
-            return;
-        }
+        if (total == 0) { norm_freq[0] = TOT; return; }
 
-        // Scaling (floor) e garantir pelo menos 1 para símbolos presentes
         double scale = static_cast<double>(TOT) / static_cast<double>(total);
         uint32_t sum = 0;
         for (int i = 0; i < 256; ++i) {
-            if (freq[i] == 0) { norm_freq[i] = 0; continue; }
+            if (freq[i] == 0) continue;
             uint32_t v = static_cast<uint32_t>(std::floor(freq[i] * scale));
             if (v == 0) v = 1;
             norm_freq[i] = v;
             sum += v;
         }
 
-        // Corrigir diferenças devido a arredondamento
-        // Se soma menor que TOT, incrementa símbolos com maior original freq
+        // Ajustar para somar exatamente TOT
         if (sum < TOT) {
-            // Build array of indices sorted by original freq desc
             std::vector<int> idx(256);
             for (int i = 0; i < 256; ++i) idx[i] = i;
-            std::sort(idx.begin(), idx.end(), [&](int a, int b){ return freq[a] > freq[b]; });
+            std::sort(idx.begin(), idx.end(), [&](int a, int b) { return freq[a] > freq[b]; });
             size_t p = 0;
             while (sum < TOT) {
                 int s = idx[p % 256];
-                // preferir símbolos que existem (freq>0)
                 if (freq[s] > 0) { norm_freq[s]++; sum++; }
                 p++;
             }
         } else if (sum > TOT) {
-            // reduzir símbolos com menor impacto (freq small)
             std::vector<int> idx(256);
             for (int i = 0; i < 256; ++i) idx[i] = i;
-            std::sort(idx.begin(), idx.end(), [&](int a, int b){ return freq[a] < freq[b]; });
+            std::sort(idx.begin(), idx.end(), [&](int a, int b) { return freq[a] < freq[b]; });
             size_t p = 0;
             while (sum > TOT) {
                 int s = idx[p % 256];
@@ -212,18 +186,11 @@ private:
                 p++;
             }
         }
-        // agora sum == TOT
     }
 
-    void build_cumul_and_symtab() {
+    void build_cumul() {
         cumul.assign(257, 0);
-        for (int i = 0; i < 256; ++i) cumul[i+1] = cumul[i] + norm_freq[i];
-        symtab.assign(TOT, 0);
-        for (int s = 0; s < 256; ++s) {
-            for (uint32_t pos = cumul[s]; pos < cumul[s+1]; ++pos) {
-                symtab[pos] = static_cast<uint8_t>(s);
-            }
-        }
+        for (int i = 0; i < 256; ++i) cumul[i + 1] = cumul[i] + norm_freq[i];
     }
 };
 
