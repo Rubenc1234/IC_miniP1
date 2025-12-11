@@ -8,76 +8,169 @@
 #include <algorithm>
 #include <cstring>
 #include <iomanip>
+#include <functional>
 
 // ==========================================
-// DECODER HUFFMAN (Inverso do Fast)
+// DECODER HUFFMAN OTIMIZADO COM LUT
 // ==========================================
-struct Node {
-    uint8_t symbol;
-    std::shared_ptr<Node> left, right;
-    Node(uint8_t s) : symbol(s), left(nullptr), right(nullptr) {}
-    Node(std::shared_ptr<Node> l, std::shared_ptr<Node> r) : symbol(0), left(l), right(r) {}
-};
+// Usa tabela de lookup para descodificar até 12 bits de uma vez
 
 class HuffmanDecoder {
-    std::shared_ptr<Node> root;
+    static constexpr int LUT_BITS = 12;  // Tamanho da LUT (4096 entradas)
+    static constexpr int LUT_SIZE = 1 << LUT_BITS;
+    
+    struct LUTEntry {
+        uint8_t symbol;   // Símbolo descodificado
+        uint8_t bits;     // Número de bits consumidos (0 = código mais longo que LUT_BITS)
+    };
+    
+    std::vector<LUTEntry> lut;
+    
+    // Para códigos mais longos que LUT_BITS, usamos árvore tradicional
+    struct Node {
+        uint8_t symbol;
+        bool is_leaf;
+        int left, right;  // Índices na pool de nós
+    };
+    std::vector<Node> nodes;
+    int root_idx;
+    bool single_symbol;
+    uint8_t single_sym;
+
 public:
+    HuffmanDecoder() : lut(LUT_SIZE), single_symbol(false) {}
+
     void rebuild(const std::vector<uint32_t>& frequencies) {
-        struct PNode {
+        // 1. Construir árvore de Huffman e extrair códigos
+        struct BuildNode {
             uint64_t freq;
-            std::shared_ptr<Node> node;
-            bool operator>(const PNode& other) const { return freq > other.freq; }
+            int idx;
+            bool operator>(const BuildNode& o) const { return freq > o.freq; }
         };
-        std::priority_queue<PNode, std::vector<PNode>, std::greater<PNode>> pq;
-
+        
+        nodes.clear();
+        std::priority_queue<BuildNode, std::vector<BuildNode>, std::greater<BuildNode>> pq;
+        
+        // Criar nós folha
         for (int i = 0; i < 256; ++i) {
-            if (frequencies[i] > 0) pq.push({(uint64_t)frequencies[i], std::make_shared<Node>((uint8_t)i)});
+            if (frequencies[i] > 0) {
+                int idx = nodes.size();
+                nodes.push_back({(uint8_t)i, true, -1, -1});
+                pq.push({frequencies[i], idx});
+            }
         }
-
-        if (pq.empty()) return;
+        
+        if (pq.empty()) { root_idx = -1; return; }
+        
+        // Caso especial: único símbolo
         if (pq.size() == 1) {
-            root = std::make_shared<Node>(nullptr, nullptr); 
-            root->left = pq.top().node; 
+            single_symbol = true;
+            single_sym = nodes[pq.top().idx].symbol;
+            root_idx = pq.top().idx;
             return;
         }
-
+        single_symbol = false;
+        
+        // Construir árvore
         while (pq.size() > 1) {
             auto l = pq.top(); pq.pop();
             auto r = pq.top(); pq.pop();
-            auto parent = std::make_shared<Node>(l.node, r.node);
-            pq.push({l.freq + r.freq, parent});
+            int idx = nodes.size();
+            nodes.push_back({0, false, l.idx, r.idx});
+            pq.push({l.freq + r.freq, idx});
         }
-        root = pq.top().node;
+        root_idx = pq.top().idx;
+        
+        // 2. Gerar códigos canónicos
+        struct CodeInfo { uint8_t symbol; uint32_t code; uint8_t len; };
+        std::vector<CodeInfo> codes;
+        
+        // DFS para extrair códigos
+        std::function<void(int, uint32_t, uint8_t)> extract = [&](int idx, uint32_t code, uint8_t len) {
+            if (idx < 0) return;
+            const Node& n = nodes[idx];
+            if (n.is_leaf) {
+                codes.push_back({n.symbol, code, len});
+                return;
+            }
+            extract(n.left, code << 1, len + 1);
+            extract(n.right, (code << 1) | 1, len + 1);
+        };
+        extract(root_idx, 0, 0);
+        
+        // 3. Preencher LUT
+        for (auto& e : lut) { e.symbol = 0; e.bits = 0; }
+        
+        for (const auto& c : codes) {
+            if (c.len <= LUT_BITS) {
+                // Preencher todas as entradas que começam com este código
+                int prefix = c.code << (LUT_BITS - c.len);
+                int count = 1 << (LUT_BITS - c.len);
+                for (int i = 0; i < count; ++i) {
+                    lut[prefix + i] = {c.symbol, c.len};
+                }
+            }
+        }
     }
 
     void decompress(const std::vector<uint8_t>& in_bits, std::vector<uint8_t>& out_data, size_t original_size) {
-        out_data.clear(); out_data.reserve(original_size);
-        auto current = root;
-        size_t count = 0;
+        out_data.clear();
+        out_data.resize(original_size);
         
-        if (!root) return; // Bloco vazio
+        if (original_size == 0 || root_idx < 0) return;
         
-        // Caso especial: apenas 1 símbolo repetido
-        if (!current->left && !current->right) {
-             // Lógica: Se a árvore só tem 1 nó, o código deve ser tamanho 1 (ex: '0')
-             // A tua implementação do Encoder assume table[sym] = {0, 1}
-             // O bitstream terá N zeros.
-             // Simplesmente preenchemos com o símbolo.
-             if (current->left) out_data.assign(original_size, current->left->symbol); // Hack p/ estrutura
-             return; 
+        // Caso especial: único símbolo
+        if (single_symbol) {
+            std::fill(out_data.begin(), out_data.end(), single_sym);
+            return;
         }
-
-        for (uint8_t byte : in_bits) {
-            for (int i = 7; i >= 0; --i) {
-                if (count >= original_size) return;
-                bool bit = (byte >> i) & 1;
-                if (bit == 0) current = current->left; else current = current->right;
-
-                if (!current->left && !current->right) { 
-                    out_data.push_back(current->symbol);
-                    current = root;
-                    count++;
+        
+        // Buffer de bits para leitura rápida
+        uint64_t bit_buf = 0;
+        int bits_in_buf = 0;
+        size_t byte_pos = 0;
+        size_t out_pos = 0;
+        
+        // Pré-carregar buffer
+        while (bits_in_buf <= 56 && byte_pos < in_bits.size()) {
+            bit_buf |= (uint64_t)in_bits[byte_pos++] << (56 - bits_in_buf);
+            bits_in_buf += 8;
+        }
+        
+        while (out_pos < original_size) {
+            // Extrair LUT_BITS do topo do buffer
+            uint32_t lookup = (bit_buf >> (64 - LUT_BITS)) & (LUT_SIZE - 1);
+            const LUTEntry& entry = lut[lookup];
+            
+            if (entry.bits > 0) {
+                // Descodificação rápida via LUT
+                out_data[out_pos++] = entry.symbol;
+                bit_buf <<= entry.bits;
+                bits_in_buf -= entry.bits;
+            } else {
+                // Código mais longo que LUT_BITS - fallback para travessia
+                int idx = root_idx;
+                while (!nodes[idx].is_leaf) {
+                    bool bit = (bit_buf >> 63) & 1;
+                    bit_buf <<= 1;
+                    bits_in_buf--;
+                    idx = bit ? nodes[idx].right : nodes[idx].left;
+                    
+                    // Recarregar se necessário
+                    if (bits_in_buf < 16 && byte_pos < in_bits.size()) {
+                        while (bits_in_buf <= 56 && byte_pos < in_bits.size()) {
+                            bit_buf |= (uint64_t)in_bits[byte_pos++] << (56 - bits_in_buf);
+                            bits_in_buf += 8;
+                        }
+                    }
                 }
+                out_data[out_pos++] = nodes[idx].symbol;
+            }
+            
+            // Recarregar buffer
+            while (bits_in_buf <= 56 && byte_pos < in_bits.size()) {
+                bit_buf |= (uint64_t)in_bits[byte_pos++] << (56 - bits_in_buf);
+                bits_in_buf += 8;
             }
         }
     }

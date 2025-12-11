@@ -368,10 +368,10 @@ O ficheiro de saída (\texttt{.sc} -- \textit{SafeTensors Compressed}) possui a 
 \begin{verbatim}
 [Header Size: 8 bytes]
 [Header JSON: variável]
-[Bloco 1: MSB comprimido | LSB (raw/RLE)]
-[Bloco 2: MSB comprimido | LSB (raw/RLE)]
+[Bloco 1: MSB comprimido | LSB raw]
+[Bloco 2: MSB comprimido | LSB raw]
 ...
-[Bloco N: MSB comprimido | LSB (raw/RLE)]
+[Bloco N: MSB comprimido | LSB raw]
 \end{verbatim}
 
 O cabeçalho JSON original é preservado integralmente para garantir a compatibilidade com ferramentas existentes.
@@ -413,12 +413,20 @@ Consequentemente, optou-se por \textbf{codificar diretamente os valores brutos} 
 Foram implementados e comparados dois algoritmos de codificação entrópica:
 
 \paragraph{Codificação de Huffman (Estática)}
-Implementação clássica com tabela de frequências calculada por bloco. O cabeçalho de cada bloco inclui a tabela de frequências (256 × 4 bytes = 1 KB), permitindo a descodificação independente de blocos.
+Implementação clássica com tabela de códigos pré-calculada (\textit{Look-Up Table}) para codificação eficiente. Cada bloco inclui a tabela de frequências (256 × 4 bytes = 1 KB), permitindo a reconstrução da árvore de Huffman e descodificação independente de blocos.
 
-\paragraph{Codificação Aritmética (Estática)}
-Implementação de precisão inteira com modelo estatístico de ordem-0. Utiliza aritmética de 32 bits para evitar problemas de \textit{underflow}.
+A codificação utiliza um \textit{buffer} de bits acumulado em variável de 64 bits, emitindo bytes completos para o fluxo de saída à medida que ficam disponíveis. Esta técnica elimina operações bit-a-bit individuais, maximizando o desempenho.
 
-A Tabela~\ref{tab:entropy_bench} compara o desempenho dos dois algoritmos:
+\paragraph{Codificação rANS (\textit{Asymmetric Numeral Systems})}
+Implementação de rANS (\textit{range Asymmetric Numeral Systems}), uma técnica moderna de codificação entrópica que oferece compressão próxima da entropia com desempenho computacional superior ao da codificação aritmética tradicional. As principais características da implementação são:
+
+\begin{itemize}
+    \item \textbf{Precisão}: Utiliza uma tabela de frequências normalizada para $2^{12}$ (4096) símbolos totais;
+    \item \textbf{Estado}: Mantém um estado de 64 bits com limites $[2^{32}, 2^{40})$ para garantir precisão;
+    \item \textbf{Codificação inversa}: Os símbolos são codificados em ordem reversa, permitindo descodificação em ordem direta.
+\end{itemize}
+
+A Tabela~\ref{tab:entropy_bench} compara o desempenho dos dois algoritmos implementados:
 
 \begin{table}[H]
     \centering
@@ -426,31 +434,31 @@ A Tabela~\ref{tab:entropy_bench} compara o desempenho dos dois algoritmos:
     \label{tab:entropy_bench}
     \begin{tabular}{lccc}
         \toprule
-        \textbf{Algoritmo} & \textbf{Tamanho Final} & \textbf{Tempo Total} & \textbf{Rácio Efetivo} \\
+        \textbf{Algoritmo} & \textbf{Tamanho Final} & \textbf{Tempo Cod.} & \textbf{Tempo Dec.} \\
         \midrule
-        Huffman (Estático) & 633.04 MB & \textbf{13.98 s} & 1.58:1 \\
-        Aritmético (Estático) & \textbf{631.00 MB} & 19.07 s & 1.59:1 \\
+        Huffman (LUT) & 633.08 MB & \textbf{4.0 s} & \textbf{3.9 s} \\
+        rANS & \textbf{631.13 MB} & 4.8 s & 4.5 s \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-A Codificação Aritmética permitiu uma redução adicional de $\approx 2$ MB, o que se explica teoricamente pela sua capacidade de alocar um número fracionário de bits por símbolo. Contudo, este ganho marginal (0.3\%) implicou um aumento de 36\% no tempo de execução.
+A codificação rANS permitiu uma redução de $\approx 2$ MB comparativamente ao Huffman, o que se explica teoricamente pela sua capacidade de alocar um número fracionário de bits por símbolo. O decoder Huffman foi otimizado com uma \textit{Look-Up Table} (LUT) de 12 bits, permitindo descodificar múltiplos bits por operação e atingindo tempos competitivos com o rANS.
 
 \subsection{Estratégia para o Canal LSB}
 
 O canal LSB, com entropia de 7.96 bits/byte, apresenta características de ruído quase uniforme. Neste contexto, algoritmos de compressão entrópica tradicionais não só são ineficazes como podem resultar em \textbf{expansão} dos dados.
 
-\subsubsection{Implementação de RLE com Fallback}
+\subsubsection{Armazenamento Direto (Raw)}
 
-Implementou-se uma estratégia oportunística:
+Após análise experimental, optou-se por uma estratégia de armazenamento direto para o canal LSB:
 
-\begin{enumerate}
-    \item O algoritmo procura sequências de zeros consecutivos (indicadores de \textit{sparsity} em alguns modelos);
-    \item Se o tamanho comprimido for \textbf{superior} ao original, o bloco é armazenado em modo \textit{Raw} (cópia direta);
-    \item Um bit de flag no início de cada bloco indica o modo utilizado.
-\end{enumerate}
+\begin{itemize}
+    \item A entropia do canal LSB ($\approx 7.96$ bits/byte) está muito próxima do máximo teórico de 8 bits/byte;
+    \item Qualquer algoritmo de compressão entrópica introduziria \textit{overhead} de metadados (tabelas de frequência, marcadores) que anularia eventuais ganhos;
+    \item A cópia direta (\textit{Raw}) é computacionalmente eficiente e não introduz latência adicional.
+\end{itemize}
 
-\textbf{Resultado Prático}: Nos testes realizados com o modelo Qwen2-0.5B, o mecanismo de \textit{fallback} foi ativado em 100\% dos blocos, resultando em armazenamento direto para todo o canal LSB. Este resultado era esperado, dado que modelos densos (não esparsos) não apresentam sequências significativas de zeros.
+\textbf{Decisão de Engenharia}: Os dados do canal LSB são copiados diretamente para o ficheiro comprimido sem qualquer transformação. Esta abordagem simplifica significativamente a implementação e maximiza a velocidade de processamento sem comprometer a taxa de compressão global.
 
 \subsection{Modos de Operação}
 
@@ -458,11 +466,11 @@ Para satisfazer o requisito de múltiplos pontos de operação, o codec oferece 
 
 \begin{tcolorbox}[colback=yellow!10!white, colframe=yellow!75!black, title=Modos de Operação]
 \begin{itemize}
-    \item \textbf{Modo FAST}: Huffman (MSB) + Raw (LSB) \\
-    \textit{Prioriza velocidade de processamento}
+    \item \textbf{Modo FAST}: Huffman com LUT (MSB) + Raw (LSB) \\
+    \textit{Desempenho equilibrado entre codificação e descodificação}
     
-    \item \textbf{Modo BEST}: Aritmético (MSB) + RLE/Raw (LSB) \\
-    \textit{Prioriza minimização do tamanho final}
+    \item \textbf{Modo BEST}: rANS (MSB) + Raw (LSB) \\
+    \textit{Maximiza a taxa de compressão ($\approx$ 0.3\% melhor)}
 \end{itemize}
 \end{tcolorbox}
 
@@ -518,24 +526,24 @@ A Tabela~\ref{tab:testes_resultados} apresenta os resultados completos para todo
         \textbf{Modelo} & \textbf{Modo} & \textbf{Original} & \textbf{Comprimido} & \textbf{Rácio} & \textbf{T. Cod.} & \textbf{T. Dec.} \\
         \midrule
         \multirow{2}{*}{\texttt{model.safetensors}} 
-        & Fast & 943 MB & 634 MB & 1.488:1 & 10.5 s & 9.4 s \\
-        & Best & 943 MB & 632 MB & 1.493:1 & 15.9 s & 21.2 s \\
+        & Fast & 943 MB & 633 MB & 1.488:1 & 4.0 s & 3.9 s \\
+        & Best & 943 MB & 631 MB & 1.493:1 & 4.8 s & 4.5 s \\
         \midrule
         \multirow{2}{*}{\texttt{model\_1.safetensors}} 
-        & Fast & 421 MB & 374 MB & 1.124:1 & 8.2 s & 5.9 s \\
-        & Best & 421 MB & 374 MB & 1.126:1 & 10.0 s & 15.0 s \\
+        & Fast & 421 MB & 374 MB & 1.124:1 & 1.6 s & 2.0 s \\
+        & Best & 421 MB & 373 MB & 1.125:1 & 2.1 s & 2.1 s \\
         \midrule
         \multirow{2}{*}{\texttt{model\_2.safetensors}} 
-        & Fast & 437 MB & 390 MB & 1.121:1 & 8.7 s & 6.0 s \\
-        & Best & 437 MB & 389 MB & 1.123:1 & 10.7 s & 15.7 s \\
+        & Fast & 437 MB & 389 MB & 1.121:1 & 1.6 s & 2.1 s \\
+        & Best & 437 MB & 389 MB & 1.123:1 & 2.3 s & 2.1 s \\
         \midrule
         \multirow{2}{*}{\texttt{model\_3.safetensors}} 
-        & Fast & 682 MB & 608 MB & 1.122:1 & 13.4 s & 9.7 s \\
-        & Best & 682 MB & 607 MB & 1.124:1 & 16.3 s & 24.7 s \\
+        & Fast & 682 MB & 607 MB & 1.122:1 & 2.9 s & 3.2 s \\
+        & Best & 682 MB & 606 MB & 1.123:1 & 3.6 s & 3.2 s \\
         \midrule
         \multirow{2}{*}{\texttt{model\_4.safetensors}} 
-        & Fast & 4.6 GB & 3.1 GB & 1.495:1 & 54.9 s & 47.0 s \\
-        & Best & 4.6 GB & 3.1 GB & 1.501:1 & 81.0 s & 108.0 s \\
+        & Fast & 4.6 GB & 3.1 GB & 1.495:1 & 20.4 s & 25.1 s \\
+        & Best & 4.6 GB & 3.1 GB & 1.501:1 & 26.0 s & 25.1 s \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -571,8 +579,8 @@ A Tabela~\ref{tab:comparison} compara o codec desenvolvido com os compressores d
         XZ -9 & 1.43:1 & 933 s & 35 s \\
         ZSTD -1 & 1.29:1 & 3 s & 1 s \\
         \midrule
-        \textbf{Codec (Fast)} & \textbf{1.49:1} & 10.5 s & 9.4 s \\
-        \textbf{Codec (Best)} & \textbf{1.49:1} & 15.9 s & 21.2 s \\
+        \textbf{Codec (Fast)} & 1.49:1 & 4.0 s & 3.9 s \\
+        \textbf{Codec (Best)} & 1.49:1 & 4.8 s & 4.5 s \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -597,23 +605,27 @@ Esta variação sugere que diferentes arquiteturas de rede neuronal apresentam d
 
 \subsubsection{Desempenho Temporal}
 
-O modo \textbf{Fast} oferece um compromisso excelente:
+Ambos os modos oferecem desempenho excelente após a otimização do decoder Huffman com LUT:
 \begin{itemize}
-    \item \textbf{3.5× mais lento que ZSTD}, mas com rácio 15\% superior;
-    \item \textbf{9× mais rápido que BZIP2}, com rácio 3.5\% superior.
+    \item \textbf{Modo Fast}: Codificação em 4.0 s e descodificação em 3.9 s (\textbf{ciclo completo < 8 s});
+    \item \textbf{Modo Best}: Codificação em 4.8 s e descodificação em 4.5 s, com melhor compressão.
 \end{itemize}
 
-O modo \textbf{Best} é adequado para cenários de arquivo onde o tempo não é crítico.
+Comparativamente aos compressores de uso geral:
+\begin{itemize}
+    \item \textbf{Velocidade similar ao ZSTD} na codificação, mas com rácio 15\% superior (1.49:1 vs 1.29:1);
+    \item \textbf{23× mais rápido que BZIP2} na codificação e \textbf{12× mais rápido} na descodificação.
+\end{itemize}
 
 \subsubsection{Escalabilidade}
 
 Os tempos de processamento escalam linearmente com o tamanho do ficheiro:
 \begin{itemize}
-    \item \texttt{model.safetensors} (943 MB): 10.5 s
-    \item \texttt{model\_4.safetensors} (4.6 GB): 54.9 s
+    \item \texttt{model.safetensors} (943 MB): 4.0 s cod. + 3.9 s dec. (Fast)
+    \item \texttt{model\_4.safetensors} (4.6 GB): 20.4 s cod. + 25.1 s dec. (Fast)
 \end{itemize}
 
-O rácio tempo/tamanho mantém-se aproximadamente constante ($\approx$ 11 MB/s no modo Fast), demonstrando boa escalabilidade.
+O \textit{throughput} mantém-se aproximadamente constante ($\approx$ 185--235 MB/s), demonstrando excelente escalabilidade.
 
 % ----------------------------------------------------------------------------------
 % SECÇÃO 6: CONCLUSÕES
@@ -632,7 +644,7 @@ Este trabalho desenvolveu um codec especializado para a compressão sem perdas d
     
     \item \textbf{Superação dos Benchmarks}: O codec desenvolvido atingiu um rácio de compressão de 1.49:1, superando todos os compressores de uso geral testados, incluindo o BZIP2 (1.44:1).
     
-    \item \textbf{Eficiência Computacional}: O modo Fast processa aproximadamente 90 MB/s, oferecendo um compromisso favorável entre compressão e velocidade.
+    \item \textbf{Eficiência Computacional}: O decoder Huffman otimizado com LUT de 12 bits atinge \textit{throughput} de $\approx$ 240 MB/s, permitindo ciclos completos de codificação + descodificação em menos de 8 segundos para ficheiros de 1 GB.
     
     \item \textbf{Múltiplos Pontos de Operação}: A disponibilização de dois modos (Fast e Best) permite ao utilizador escolher o compromisso ideal para o seu caso de uso.
 \end{enumerate}
@@ -644,7 +656,7 @@ Identificaram-se as seguintes limitações e oportunidades de melhoria:
 \begin{itemize}
     \item \textbf{Variabilidade entre modelos}: Os rácios de compressão variam significativamente entre diferentes arquiteturas de rede neuronal. Uma extensão interessante seria a implementação de um mecanismo adaptativo que selecione a estratégia ótima com base em estatísticas do bloco.
     
-    \item \textbf{Canal LSB}: A compressão oportunística (RLE) não foi eficaz para modelos densos. Técnicas mais sofisticadas, como a exploração de correlações intra-tensor, poderiam melhorar os resultados.
+    \item \textbf{Canal LSB}: O armazenamento direto (Raw) é a única estratégia viável para dados com entropia próxima de 8 bits/byte. Técnicas mais sofisticadas, como a exploração de correlações intra-tensor ou transformadas de domínio, poderiam eventualmente reduzir a entropia efetiva deste canal.
     
     \item \textbf{Paralelização}: A arquitetura por blocos é intrinsecamente paralelizável. Uma implementação \textit{multi-threaded} poderia reduzir significativamente os tempos de processamento em sistemas \textit{multi-core}.
     
