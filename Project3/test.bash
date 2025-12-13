@@ -43,7 +43,7 @@ for INPUT_FILE in data/model*.safetensors; do
         # 2. Codificação Rápida
         echo "--------------------------------------------------------"
         echo "Codificação em modo 'fast':"
-        time ./bin/encoder "$INPUT_FILE" "$OUTPUT_DIR/${BASENAME}.sc" fast
+        /usr/bin/time -v ./bin/encoder "$INPUT_FILE" "$OUTPUT_DIR/${BASENAME}.sc" fast
         
         # 3. Mostrar tamanho do arquivo codificado
         echo "Tamanho do arquivo codificado ($BASENAME.sc):"
@@ -53,7 +53,7 @@ for INPUT_FILE in data/model*.safetensors; do
         # 4. Decodificação
         echo "--------------------------------------------------------"
         echo "Decodificação:"
-        time ./bin/decoder "$OUTPUT_DIR/${BASENAME}.sc" "$OUTPUT_DIR/${BASENAME}_restored_fast.safetensors"
+        /usr/bin/time -v ./bin/decoder "$OUTPUT_DIR/${BASENAME}.sc" "$OUTPUT_DIR/${BASENAME}_restored_fast.safetensors"
         
         # 5. Mostrar tamanho do arquivo restaurado
         echo "Tamanho do arquivo restaurado (fast):"
@@ -90,7 +90,7 @@ for INPUT_FILE in data/model*.safetensors; do
         # 2. Codificação Melhor
         echo "--------------------------------------------------------"
         echo "Codificação em modo 'best':"
-        time ./bin/encoder "$INPUT_FILE" "$OUTPUT_DIR/${BASENAME}.sc" best
+        /usr/bin/time -v ./bin/encoder "$INPUT_FILE" "$OUTPUT_DIR/${BASENAME}.sc" best
         
         # 3. Mostrar tamanho do arquivo codificado
         echo "Tamanho do arquivo codificado ($BASENAME.sc):"
@@ -100,7 +100,7 @@ for INPUT_FILE in data/model*.safetensors; do
         # 4. Decodificação
         echo "--------------------------------------------------------"
         echo "Decodificação:"
-        time ./bin/decoder "$OUTPUT_DIR/${BASENAME}.sc" "$OUTPUT_DIR/${BASENAME}_restored_best.safetensors"
+        /usr/bin/time -v ./bin/decoder "$OUTPUT_DIR/${BASENAME}.sc" "$OUTPUT_DIR/${BASENAME}_restored_best.safetensors"
         
         # 5. Mostrar tamanho do arquivo restaurado
         echo "Tamanho do arquivo restaurado (best):"
