@@ -1,0 +1,60 @@
+Este é um relatório já bastante sólido, com uma excelente estrutura metodológica e resultados muito positivos (bater o BZIP2 em rácio e o ZSTD em velocidade é um feito notável). No entanto, para garantir a nota máxima (**20 valores**), é necessário elevar o nível de rigor científico, preencher pequenas lacunas em relação ao enunciado e polir a apresentação.
+
+Aqui está uma lista de correções e melhorias, divididas por categorias:
+
+### 1. Cumprimento Estrito do Enunciado (Crítico)
+
+* **Medição Real de Memória no Codec (Tabela 5):**
+    * [cite_start]O enunciado [cite: 3393] exige explicitamente que a avaliação inclua "memory usage".
+    * [cite_start]No relatório atual, a secção 3.2 (Tabela 2) mostra a RAM para os benchmarks [cite: 152][cite_start], mas a secção 5 (Resultados Experimentais) apenas *estima* o pico de RAM em texto ("Aproximadamente 10 MB")[cite: 249].
+    * [cite_start]**Ação:** Adicione uma coluna "Pico RAM" à **Tabela 5** [cite: 260] com valores medidos (usando `/usr/bin/time -v` tal como nos benchmarks). Isso prova empiricamente a eficiência de memória, em vez de apenas a estimar.
+
+### 2. Aprofundamento da Análise Técnica
+
+* **Validação da Decisão "Raw" no LSB:**
+    * [cite_start]Na secção 4.4.1[cite: 234], vocês decidem não comprimir o LSB baseados na entropia (~7.96). Para um 20, devem provar que tentaram e falharam.
+    * **Ação:** Mencione brevemente (ou adicione uma pequena tabela) que testaram, por exemplo, RLE ou Huffman no LSB e que o rácio foi < 1.0 (expansão). Isso transforma uma "suposição teórica" numa "conclusão experimental".
+* **Análise de Planos de Bits (Bit-plane Analysis):**
+    * [cite_start]A vossa análise MSB/LSB é excelente[cite: 75]. Para elevar o nível, poderiam incluir um pequeno gráfico ou menção à entropia *por bit* (do bit 0 ao 15).
+    * **Ação:** Isso confirmaria visualmente que os primeiros 8 bits (LSB) têm entropia ~1.0 e os últimos (MSB) têm entropia mais baixa, validando visualmente o corte exato no byte 8.
+* **Discussão sobre "Floating Point Compressors":**
+    * [cite_start]Na secção 6.3[cite: 317], mencionam `fpzip` e `zfp` como trabalho futuro. Num relatório de excelência, deve haver uma frase na secção de Benchmark ou Introdução a explicar porque não foram usados ou comparados diretamente (ex: "Estes compressores muitas vezes não suportam nativamente BF16 ou requerem bibliotecas externas complexas, fugindo ao âmbito de um codec *stand-alone*").
+
+### 3. Melhorias na Implementação e Descrição
+
+* **Detalhe do Cabeçalho do Ficheiro Comprimido:**
+    * [cite_start]Na secção 4.2[cite: 182], descrevem o formato. Falta um detalhe importante para um codec robusto: **Magic Number / Assinatura**.
+    * **Ação:** Adicionem 4 bytes no início (ex: `0x53 0x43 0x00 0x01` - SC v0.1) para identificar o tipo de ficheiro e versão. Demonstrar preocupação com versionamento é um traço de engenharia profissional.
+* **Especificação do Algoritmo Huffman:**
+    * [cite_start]Mencionam "Huffman (Estática)" com tabelas incluídas no bloco[cite: 214].
+    * **Ação:** Especifiquem se usaram **Canonical Huffman**. Se sim, digam-no. O Canonical Huffman permite reconstruir a árvore apenas com os comprimentos dos códigos, poupando espaço no cabeçalho do bloco comparado com o envio da tabela de frequências completa. Se não usaram, mencionem isso como uma possível otimização futura.
+
+### 4. Apresentação e Estrutura do Relatório
+
+* **Adicionar um Resumo (Abstract):**
+    * [cite_start]O relatório começa logo na Introdução[cite: 13]. Relatórios académicos de topo devem ter um Resumo executivo antes do índice.
+    * **Ação:** Escrevam um parágrafo de 10-15 linhas resumindo: O problema (pesos BF16), a abordagem (Split-stream MSB/LSB), e o resultado chave (Rácio 1.49:1, superior ao BZIP2, com velocidade próxima do ZSTD).
+* **Qualidade dos Gráficos:**
+    * [cite_start]As Figuras 1 e 2 [cite: 86-116] parecem capturas de ecrã do Gnuplot/Matplotlib com fundo cinza.
+    * **Ação:** Regenerem os gráficos num formato vetorial (PDF/SVG) ou PNG de alta resolução com fundo branco e fontes maiores nos eixos para aspeto profissional de "paper".
+* **Consistência Terminológica:**
+    * Usem "SafeTensors" (CamelCase) consistentemente. [cite_start]O título usa "Safe Tensors" separado[cite: 8], mas a comunidade usa junto.
+    * Uniformizem as unidades: `MB/s` vs `s`. [cite_start]Na secção 5.5.4[cite: 299], falam em throughput (MB/s). Seria interessante adicionar uma coluna de MB/s à Tabela 5 para evidenciar a velocidade independentemente do tamanho do ficheiro.
+
+### 5. Otimização da "Venda" dos Resultados
+
+* **O "Trade-off" Fast vs Best:**
+    * [cite_start]Na secção 5.5.3[cite: 292], comparam Fast e Best. A diferença é mínima (0.3% em compressão, 0.8s em tempo).
+    * **Ação:** Sejam críticos. Vale a pena ter o modo "Best" se o ganho é tão marginal? Talvez justificar que o rANS (usado no Best) seria muito superior se a entropia fosse mais baixa (< 1 bit), mas como o MSB tem ~2.7 bits, o Huffman é quase ótimo. Esta análise teórica demonstra domínio profundo da matéria.
+* **Comparação Visual:**
+    * **Ação:** Adicionem um gráfico de barras comparativo (Rácio vs Tempo) onde o vosso Codec aparece no "Sweet Spot" (topo esquerdo ou direito, dependendo dos eixos), visualizando a superioridade face ao XZ (lento) e GZIP (fraca compressão).
+
+### Resumo das Alterações Prioritárias:
+
+1.  **Inserir Resumo/Abstract** no início.
+2.  **Tabela 5:** Adicionar coluna de **Memória Medida**.
+3.  **Secção 4.4:** Adicionar prova de falha de compressão no LSB.
+4.  **Secção 4.2:** Adicionar *Magic Bytes/Version* ao formato do ficheiro.
+5.  **Gráficos:** Melhorar a estética das Figuras 1 e 2.
+
+Com estas alterações, o relatório passará de "Excelente execução técnica" para "Trabalho académico de nível profissional", garantindo os 20 valores.
