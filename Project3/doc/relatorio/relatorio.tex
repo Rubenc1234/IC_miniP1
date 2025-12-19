@@ -272,12 +272,11 @@ Antes de desenvolver uma solução especializada, é fundamental estabelecer um 
 
 Os testes foram executados numa máquina com as seguintes características:
 \begin{itemize}
-    \item \textbf{CPU}: Intel® Core™ i7-1065G7 Processor (4 núcleos, 8 threads, até 3.9~GHz)
-    \item \textbf{RAM}: 16~GB DDR4-2667 (SODIMM)
-    \item \textbf{Armazenamento}: SSD NVMe (Samsung, 512~GB)
-    \item \textbf{Sistema Operativo}: Ubuntu 24.04.3 LTS (64-bit), kernel Linux 6.8.0
+    \item \textbf{CPU}: AMD Ryzen 5 5600H with Radeon Graphics
+    \item \textbf{RAM}: 16 GB
+    \item \textbf{Armazenamento}: SSD NVMe 512 GB
+    \item \textbf{Sistema Operativo}: Ubuntu 24.04.3 LTS
 \end{itemize}
-
 Para cada compressor, foram medidos:
 \begin{itemize}
     \item \textbf{Tamanho final}: Dimensão do ficheiro comprimido em MB;
@@ -287,9 +286,6 @@ Para cada compressor, foram medidos:
 \end{itemize}
 
 O pico de RAM foi medido utilizando a ferramenta \texttt{/usr/bin/time -v}, que reporta o \textit{Maximum resident set size}.
-
-
-\subsection{Resultados do Benchmarking}
 
 A Tabela~\ref{tab:benchmark} apresenta os resultados consolidados para todos os compressores testados.
 
@@ -301,12 +297,12 @@ A Tabela~\ref{tab:benchmark} apresenta os resultados consolidados para todos os 
 \toprule
 \textbf{Compressor} & \textbf{Tamanho} & \textbf{Rácio} & \textbf{T. Comp.} & \textbf{T. Decomp.} & \textbf{RAM (Comp.)} \\
 \midrule
-Original & 942 MB & 1.00:1 & --- & --- & --- \\
-GZIP -1 & 754 MB & 1.25:1 & 40 s & 11 s & 1.9 MB \\
-GZIP -9 & 746 MB & 1.26:1 & 104 s & 9 s & 1.9 MB \\
-BZIP2 & 654 MB & \textbf{1.44:1} & 94 s & 49 s & 7.8 MB \\
-XZ -9 & 660 MB & 1.43:1 & 933 s & 35 s & 675 MB \\
-ZSTD -1 & 733 MB & 1.29:1 & \textbf{3 s} & \textbf{1 s} & 15 MB \\
+Original & 943 MB & 1.00:1 & --- & --- & --- \\
+GZIP -1 & 754 MB & 1.25:1 & 28 s & 7 s & 1.9 MB \\
+GZIP -9 & 746 MB & 1.26:1 & 76 s & 6 s & 1.9 MB \\
+BZIP2 & 654 MB & \textbf{1.44:1} & 66 s & 40 s & 7.8 MB \\
+XZ -9 & x MB & x:1 & x s & x s & x MB \\
+ZSTD -1 & 734 MB & 1.28:1 & \textbf{2 s} & \textbf{1 s} & 15 MB \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -314,21 +310,20 @@ ZSTD -1 & 733 MB & 1.29:1 & \textbf{3 s} & \textbf{1 s} & 15 MB \\
 \subsection{Análise dos Resultados}
 
 \subsubsection{Taxa de Compressão}
-O \textbf{BZIP2} obteve a melhor taxa de compressão (1.44:1), seguido de perto pelo \textbf{XZ} (1.43:1). Ambos utilizam algoritmos baseados em transformadas (\textit{Burrows-Wheeler} e \textit{LZMA}, respetivamente) que conseguem explorar padrões de longo alcance nos dados.
+O \textbf{BZIP2} obteve a melhor taxa de compressão (1.44:1), utilizando o algoritmo baseado na transformada de \textit{Burrows-Wheeler} que consegue explorar padrões de longo alcance nos dados.
 
-Os compressores baseados em LZ77/LZ78 (\textbf{GZIP} e \textbf{ZSTD}) apresentaram rácios inferiores (1.25--1.29:1), sugerindo que os padrões de repetição literal são menos prevalentes neste tipo de dados.
+Os compressores baseados em LZ77/LZ78 (\textbf{GZIP} e \textbf{ZSTD}) apresentaram rácios inferiores (1.25--1.28:1), sugerindo que os padrões de repetição literal são menos prevalentes neste tipo de dados.
 
 \subsubsection{Tempo de Processamento}
-O \textbf{ZSTD} destacou-se claramente em velocidade, com apenas 3 segundos para compressão e 1 segundo para descompressão. Este desempenho é particularmente relevante para cenários de carregamento frequente de modelos.
+O \textbf{ZSTD} destacou-se claramente em velocidade, com apenas 2 segundos para compressão e 1 segundo para descompressão. Este desempenho é particularmente relevante para cenários de carregamento frequente de modelos.
 
-O \textbf{XZ}, apesar do bom rácio de compressão, apresentou um tempo de compressão proibitivo de mais de 15 minutos, tornando-o impraticável para uso regular.
+O \textbf{GZIP -9}, apesar de um rácio de compressão ligeiramente superior ao GZIP -1, requer quase 3 vezes mais tempo de compressão (76 s vs. 28 s).
 
 \subsubsection{Consumo de Memória}
 O consumo de memória variou significativamente entre os compressores:
 \begin{itemize}
     \item \textbf{GZIP}: Muito eficiente (1.9 MB), adequado para sistemas com recursos limitados;
-    \item \textbf{BZIP2} e \textbf{ZSTD}: Consumo moderado (7.8--15 MB);
-    \item \textbf{XZ}: Consumo elevado (675 MB), que pode ser problemático em sistemas com pouca RAM.
+    \item \textbf{BZIP2} e \textbf{ZSTD}: Consumo moderado (7.8--15 MB).
 \end{itemize}
 
 \subsection{Conclusões do Benchmarking}
@@ -336,11 +331,12 @@ O consumo de memória variou significativamente entre os compressores:
 Os resultados permitem identificar dois pontos de operação de referência:
 
 \begin{enumerate}
-    \item \textbf{Máxima compressão}: BZIP2 com rácio 1.44:1, tempo aceitável (94 s) e consumo moderado de RAM;
-    \item \textbf{Máxima velocidade}: ZSTD com rácio 1.29:1, tempo excelente (3 s) e consumo baixo de RAM.
+    \item \textbf{Máxima compressão}: BZIP2 com rácio 1.44:1, tempo aceitável (66 s) e consumo moderado de RAM;
+    \item \textbf{Máxima velocidade}: ZSTD com rácio 1.28:1, tempo excelente (2 s) e consumo baixo de RAM.
 \end{enumerate}
 
 O objetivo do codec a desenvolver será \textbf{superar o BZIP2 em taxa de compressão} mantendo tempos competitivos com o ZSTD.
+
 
 % ----------------------------------------------------------------------------------
 % SECÇÃO 4: IMPLEMENTAÇÃO DO CODEC
@@ -424,9 +420,14 @@ Consequentemente, optou-se por \textbf{codificar diretamente os valores brutos} 
 Foram implementados e comparados dois algoritmos de codificação entrópica:
 
 \paragraph{Codificação de Huffman (Estática)}
-Implementação clássica com tabela de códigos pré-calculada (\textit{Look-Up Table}) para codificação eficiente. Cada bloco inclui a tabela de frequências (256 × 4 bytes = 1 KB), permitindo a reconstrução da árvore de Huffman e descodificação independente de blocos.
+Implementação clássica de codificação de Huffman, uma técnica de codificação entrópica que oferece compressão eficiente com tabela de códigos pré-calculada. As principais características da implementação são:
 
-A codificação utiliza um \textit{buffer} de bits acumulado em variável de 64 bits, emitindo bytes completos para o fluxo de saída à medida que ficam disponíveis. Esta técnica elimina operações bit-a-bit individuais, maximizando o desempenho.
+\begin{itemize}
+    \item \textbf{Look-Up Table (LUT)}: Tabela de códigos pré-calculada para codificação eficiente em tempo $O(1)$;
+    \item \textbf{Tabela de frequências}: Cada bloco inclui a tabela de frequências (256 × 4 bytes = 1 KB), permitindo a reconstrução da árvore de Huffman;
+    \item \textbf{Buffer de 64 bits}: Acumulação eficiente de bits, emitindo bytes completos para o fluxo de saída à medida que ficam disponíveis;
+    \item \textbf{Descodificação independente}: Cada bloco pode ser descodificado independentemente dos restantes.
+\end{itemize}
 
 \paragraph{Codificação Aritmética}
 Implementação de codificação aritmética, uma técnica de codificação entrópica que oferece compressão próxima da entropia teórica. As principais características da implementação são:
@@ -447,8 +448,8 @@ A Tabela~\ref{tab:entropy_bench} compara o desempenho dos dois algoritmos implem
         \toprule
         \textbf{Algoritmo} & \textbf{Tamanho Final} & \textbf{Tempo Cod.} & \textbf{Tempo Dec.} \\
         \midrule
-        Huffman (LUT) & x MB & \textbf{x s} & \textbf{x s} \\
-        Aritmética & \textbf{x MB} & x s & x s \\
+        Huffman (LUT) & 634 MB & \textbf{2.49 s} & \textbf{3.12 s} \\
+        Aritmética & \textbf{632 MB} & 11.30 s & 17.53 s \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -481,6 +482,28 @@ No modo BEST, o canal LSB é também comprimido utilizando codificação aritmé
     \item Permite obter a taxa de compressão máxima possível para utilizadores que privilegiam o tamanho sobre a velocidade.
 \end{itemize}
 
+A Tabela~\ref{tab:best_comparison} compara o desempenho entre a codificação aritmética apenas no MSB (com LSB \textit{raw}) e a codificação aritmética em ambos os canais:
+
+\begin{table}[H]
+    \centering
+    \caption{Impacto da Compressão do Canal LSB no Modo BEST}
+    \label{tab:best_comparison}
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Configuração} & \textbf{Tamanho} & \textbf{Rácio} & \textbf{T. Cod.} & \textbf{T. Dec.} \\
+        \midrule
+        Aritmética (MSB) + Raw (LSB) & 632 MB & 1.49:1 & 11.30 s & 17.53 s \\
+        Aritmética (MSB + LSB) & \textbf{629.5 MB} & \textbf{1.50:1} & 12.17 s & 38.21 s \\
+        \midrule
+        \textbf{Diferença} & -2.5 MB & +0.01 & +0.87 s & +20.68 s \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+A compressão adicional do canal LSB proporciona uma redução modesta de aproximadamente 2.5 MB (0.4\%), à custa de um aumento significativo no tempo de descompressão (+118\%). Este compromisso reflecte a natureza quase uniforme do canal LSB: a codificação aritmética consegue extrair os escassos 0.04 bits/byte de redundância residual ($8 - 7.96$), mas o custo computacional da descodificação símbolo-a-símbolo é substancial.
+
+Esta configuração é recomendada para cenários onde o espaço de armazenamento é crítico e a descompressão é realizada com pouca frequência.
+
 \subsection{Modos de Operação}
 
 Para satisfazer o requisito de múltiplos pontos de operação, o codec oferece dois modos:
@@ -491,7 +514,7 @@ Para satisfazer o requisito de múltiplos pontos de operação, o codec oferece 
     \textit{Otimizado para velocidade de codificação e descodificação}
     
     \item \textbf{Modo BEST}: Aritmética (MSB) + Aritmética (LSB) em paralelo \\
-    \textit{Maximiza a taxa de compressão utilizando processamento paralelo com \texttt{std::async}}
+    \textit{Maximiza a taxa de compressão}
 \end{itemize}
 \end{tcolorbox}
 
@@ -503,10 +526,42 @@ O codec foi desenhado para operar com consumo de memória controlado:
 
 \begin{itemize}
     \item \textbf{Processamento por blocos}: Cada bloco de 1 MB é processado independentemente, evitando a necessidade de carregar o ficheiro completo em memória;
-    \item \textbf{Buffers reutilizáveis}: Os \textit{buffers} de entrada/saída são alocados uma única vez e reutilizados para todos os blocos;
-    \item \textbf{Pico de RAM estimado}: Aproximadamente 10 MB para o codec, independentemente do tamanho do ficheiro de entrada.
+    \item \textbf{Buffers reutilizáveis}: Os \textit{buffers} de entrada/saída são alocados uma única vez e reutilizados para todos os blocos.
 \end{itemize}
 
+\subsubsection{Otimização do Tamanho de Bloco}
+
+A escolha do tamanho de bloco resulta de um estudo experimental que avaliou o compromisso entre taxa de compressão, tempo de processamento e consumo de memória. A Tabela~\ref{tab:block_size} apresenta os resultados obtidos para diferentes configurações:
+
+\begin{table}[H]
+    \centering
+    \caption{Impacto do Tamanho de Bloco no Desempenho do Codec}
+    \label{tab:block_size}
+    \begin{tabular}{lcccccc}
+        \toprule
+        \textbf{Bloco} & \multicolumn{3}{c}{\textbf{Modo BEST}} & \multicolumn{3}{c}{\textbf{Modo FAST}} \\
+        \cmidrule(lr){2-4} \cmidrule(lr){5-7}
+        & \textbf{Tamanho} & \textbf{Tempo} & \textbf{RAM} & \textbf{Tamanho} & \textbf{Tempo} & \textbf{RAM} \\
+        \midrule
+        64 KB & 657.2 MB & 23.04 s & 3.9 MB & 646.8 MB & 1.56 s & 4.0 MB \\
+        128 KB & 642.4 MB & 23.35 s & 4.2 MB & 639.4 MB & 1.44 s & 4.0 MB \\
+        256 KB & 635.0 MB & 22.48 s & 4.2 MB & 635.8 MB & 1.42 s & 4.0 MB \\
+        512 KB & 631.3 MB & 21.95 s & 5.2 MB & 634.0 MB & 1.34 s & 4.6 MB \\
+        \textbf{1 MB} & \textbf{629.5 MB} & \textbf{21.51 s} & 6.5 MB & \textbf{632.5 MB} & 1.48 s & 5.6 MB \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+A análise dos resultados revela que:
+
+\begin{itemize}
+    \item \textbf{Taxa de compressão}: Blocos maiores permitem estatísticas mais representativas para a codificação entrópica, melhorando o rácio de compressão. A diferença entre 64 KB e 1 MB é de aproximadamente 28 MB (4.2\%) no modo BEST;
+    \item \textbf{Tempo de processamento}: Blocos maiores reduzem o \textit{overhead} por bloco (tabelas de frequências, metadados), resultando em tempos globalmente inferiores;
+    \item \textbf{Consumo de RAM}: O aumento de 3.9 MB para 6.6 MB é negligenciável para sistemas modernos;
+    \item \textbf{Retornos decrescentes}: A curva de melhoria estabiliza a partir de 512 KB, sugerindo que blocos superiores a 1 MB teriam ganhos marginais.
+\end{itemize}
+
+Com base nesta análise, definiu-se \textbf{1 MB como o tamanho de bloco predefinido}, oferecendo o melhor compromisso entre compressão máxima e consumo de memória aceitável.
 % ----------------------------------------------------------------------------------
 % SECÇÃO 5: RESULTADOS
 % ----------------------------------------------------------------------------------
@@ -528,10 +583,10 @@ A Tabela~\ref{tab:test_files} descreve os ficheiros utilizados nos testes:
         \textbf{Ficheiro} & \textbf{Tamanho} & \textbf{Descrição} \\
         \midrule
         \texttt{model.safetensors} & 943 MB & Qwen2-0.5B (modelo principal) \\
-        \texttt{model\_1.safetensors} & 453 MB & Modelo auxiliar 1 \\
-        \texttt{model\_2.safetensors} & 583 MB & Modelo auxiliar 2 \\
-        \texttt{model\_3.safetensors} & 2.1 GB & Modelo auxiliar 3 \\
-        \texttt{model\_4.safetensors} & 3.8 GB & Modelo de grande escala \\
+        \texttt{model\_1.safetensors} & 420 MB & Modelo auxiliar 1 \\
+        \texttt{model\_2.safetensors} & 437 MB & Modelo auxiliar 2 \\
+        \texttt{model\_3.safetensors} & 681 MB & Modelo auxiliar 3 \\
+        \texttt{model\_4.safetensors} & 4.6 GB & Modelo de grande escala \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -544,29 +599,29 @@ A Tabela~\ref{tab:testes_resultados} apresenta os resultados completos para todo
     \centering
     \caption{Resultados dos Testes de Compressão para Todos os Modelos}
     \label{tab:testes_resultados}
-    \begin{tabular}{lcccccc}
+    \begin{tabular}{lccccccc}
         \toprule
-        \textbf{Modelo} & \textbf{Modo} & \textbf{Original} & \textbf{Comprimido} & \textbf{Rácio} & \textbf{T. Cod.} & \textbf{T. Dec.} \\
+        \textbf{Modelo} & \textbf{Modo} & \textbf{Original} & \textbf{Comprimido} & \textbf{Rácio} & \textbf{T. Cod.} & \textbf{T. Dec.} & \textbf{RAM} \\
         \midrule
         \multirow{2}{*}{\texttt{model.safetensors}} 
-        & Fast & x MB & x MB & x:1 & x s & x s \\
-        & Best & x MB & x MB & x:1 & x s & x s \\
+        & Fast & 943 MB & 633 MB & 1.49:1 & 1.94 s & 2.76 s & 5.6 MB \\
+        & Best & 943 MB & 630 MB & 1.50:1 & 11.69 s & 37.93 s & 6.5 MB \\
         \midrule
         \multirow{2}{*}{\texttt{model\_1.safetensors}} 
-        & Fast & x MB & x MB & x:1 & x s & x s \\
-        & Best & x MB & x MB & x:1 & x s & x s \\
+        & Fast & 420 MB & 374 MB & 1.12:1 & 1.18 s & 1.59 s & 5.8 MB \\
+        & Best & 420 MB & 373 MB & 1.13:1 & 5.36 s & 17.26 s & 6.5 MB \\
         \midrule
         \multirow{2}{*}{\texttt{model\_2.safetensors}} 
-        & Fast & x MB & x MB & x:1 & x s & x s \\
-        & Best & x MB & x MB & x:1 & x s & x s \\
+        & Fast & 437 MB & 389 MB & 1.12:1 & 1.22 s & 1.63 s & 5.9 MB \\
+        & Best & 437 MB & 389 MB & 1.12:1 & 5.60 s & 18.35 s & 6.4 MB \\
         \midrule
         \multirow{2}{*}{\texttt{model\_3.safetensors}} 
-        & Fast & x GB & x GB & x:1 & x s & x s \\
-        & Best & x GB & x GB & x:1 & x s & x s \\
+        & Fast & 681 MB & 607 MB & 1.12:1 & 1.92 s & 2.55 s & 5.9 MB \\
+        & Best & 681 MB & 607 MB & 1.12:1 & 8.73 s & 28.24 s & 6.3 MB \\
         \midrule
         \multirow{2}{*}{\texttt{model\_4.safetensors}} 
-        & Fast & x GB & x GB & x:1 & x s & x s \\
-        & Best & x GB & x GB & x:1 & x s & x s \\
+        & Fast & 4.6 GB & 3.1 GB & 1.50:1 & 13.98 s & 19.10 s & 5.6 MB \\
+        & Best & 4.6 GB & 3.1 GB & 1.50:1 & 60.03 s & 191.49 s & 6.5 MB \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -577,11 +632,11 @@ Em todos os testes, a integridade dos dados foi verificada através de comparaç
 
 \begin{verbatim}
 $ md5sum model.safetensors
-d7baf050ec13cb76a756d0d344f28447  model.safetensors
+6ab8bc8234ce3e3ad591d52621d8c327  model.safetensors
 
 $ ./decoder model.sc model_restored.safetensors
 $ md5sum model_restored.safetensors
-d7baf050ec13cb76a756d0d344f28447  model_restored.safetensors  [MATCH]
+6ab8bc8234ce3e3ad591d52621d8c327  model_restored.safetensors  [MATCH]
 \end{verbatim}
 
 \textbf{Resultado}: 100\% dos testes confirmaram compressão sem perdas.
@@ -599,82 +654,36 @@ A Tabela~\ref{tab:comparison} compara o codec desenvolvido com os compressores d
         \toprule
         \textbf{Compressor} & \textbf{Rácio} & \textbf{Tempo Comp.} & \textbf{Tempo Decomp.} \\
         \midrule
-        BZIP2 & 1.44:1 & 94 s & 49 s \\
-        XZ -9 & 1.43:1 & 933 s & 35 s \\
-        ZSTD -1 & 1.29:1 & 3 s & 1 s \\
+        BZIP2 & 1.44:1 & 66 s & 40 s \\
+        XZ -9 & x:1 & x s & x s \\
+        ZSTD -1 & 1.28:1 & 2 s & 1 s \\
         \midrule
-        \textbf{Codec (Fast)} & x:1 & x s & x s \\
-        \textbf{Codec (Best)} & x:1 & x s & x s \\
+        \textbf{Codec (Fast)} & 1.49:1 & 1.94 s & 2.76 s \\
+        \textbf{Codec (Best)} & 1.50:1 & 11.69 s & 37.93 s \\
         \bottomrule
     \end{tabular}
 \end{table}
-
 \subsection{Análise e Discussão}
 
 \subsubsection{Taxa de Compressão}
 
-O codec desenvolvido \textbf{superou todos os compressores de uso geral testados}, atingindo um rácio de x:1 no modelo principal, comparado com 1.44:1 do melhor compressor genérico (BZIP2). Esta melhoria representa uma poupança adicional significativa no ficheiro original.
-
-A superioridade do codec especializado deve-se à exploração direta da estrutura do formato BF16, que os compressores genéricos tratam como dados opacos.
-
-\subsubsection{Variabilidade entre Modelos}
-
-Observou-se uma variação significativa nos rácios de compressão entre diferentes modelos:
-\begin{itemize}
-    \item \textbf{\texttt{model.safetensors}}: Rácio elevado ($\approx$ x:1);
-    \item \textbf{\texttt{model\_1/2/3.safetensors}}: Rácio moderado ($\approx$ x:1);
-    \item \textbf{\texttt{model\_4.safetensors}}: Rácio reduzido ($\approx$ x:1).
-\end{itemize}
-
-
-Esta variação sugere que diferentes arquiteturas de rede neuronal apresentam distribuições de pesos distintas. Modelos com pesos mais concentrados (menor variância de expoentes) beneficiam mais da estratégia de \textit{split-stream}.
+A disparidade entre os modos \textbf{Fast} e \textbf{Best} em termos de rácio é mínima (apenas 0.01 de diferença). Esta observação valida a análise estatística inicial: a compressão adicional no modo \textbf{Best} provém da tentativa de extrair redundância do canal LSB através de codificação aritmética. Contudo, sendo a entropia deste canal de aproximadamente 7.96 bits/byte, o ganho marginal de 2.5 MB (no ficheiro de 943 MB) demonstra que a mantissa dos pesos de um LLM comporta-se, para todos os efeitos práticos, como ruído incompressível.
 
 \subsubsection{Desempenho Temporal}
 
-Ambos os modos oferecem desempenho consistente após a otimização do decoder Huffman, com LUT:
-\begin{itemize}
-    \item \textbf{Modo Fast}: Para o modelo principal (\texttt{model.safetensors}), a codificação foi concluída em x~s e a descodificação em x~s;
-    \item \textbf{Modo Best}: A codificação aumentou para x~s e a descodificação para x~s, proporcionando uma melhoria marginal na taxa de compressão.
-\end{itemize}
+Nesta métrica, o modo \textbf{Fast} é claramente superior ao modo \textbf{Best}. A utilização de tabelas de procura (LUT) para a descodificação Huffman permite ao modo \textbf{Fast} ser aproximadamente 6 vezes mais rápido na compressão e 13 vezes mais rápido na descompressão. 
 
-Comparativamente aos compressores de uso geral, o codec desenvolvido apresenta:
-\begin{itemize}
-    \item \textbf{Desempenho temporal superior ao BZIP2 e XZ} em todos os cenários testados, tanto na codificação como na descodificação;
-    \item \textbf{Taxa de compressão superior ao ZSTD}, atingindo até 1.49:1 no modelo principal, à custa de um maior tempo de processamento.
-\end{itemize}
+O custo computacional da codificação aritmética no modo \textbf{Best} (especialmente a gestão de intervalos e re-normalizações bit-a-bit) traduz-se num tempo de descompressão de 37.93 s. Comparativamente, os 2.76 s do modo \textbf{Fast} tornam-no muito mais viável para aplicações em tempo real ou sistemas de \textit{deployment} de modelos onde a latência de carregamento é crítica. O modo \textbf{Fast} consegue, portanto, o melhor compromisso entre rácio e velocidade.
 
 \subsubsection{Comparação do Pico de RAM}
 
-A Tabela~\ref{tab:ram_peak} mostra o uso máximo de memória residente (RAM) durante a codificação e decodificação dos modelos usando os modos \textbf{BEST} e \textbf{FAST}.
-
-\begin{table}[h!]
-\centering
-\begin{tabular}{lcccc}
-\hline
-\textbf{Modelo} & \textbf{BEST Cod. (kB)} & \textbf{BEST Dec. (kB)} & \textbf{FAST Cod. (kB)} & \textbf{FAST Dec. (kB)} \\
-\hline
-model\_1 & x & x & x & x \\
-model\_2 & x & x & x & x \\
-model\_3 & x & x & x & x \\
-model & x & x & x & x \\
-model\_4 & x & x & x & x \\
-\hline
-\end{tabular}
-\caption{Pico de RAM (em kB) durante codificação e decodificação para cada modelo.}
-\label{tab:ram_peak}
-\end{table}
-
-Observa-se que o pico de RAM é similar entre os modos, com variações pequenas dependendo do tamanho do modelo e do método de compressão. Em geral, o modo \textbf{BEST} tende a consumir ligeiramente mais memória durante a decodificação.
+Graças à estratégia de processamento por blocos de 1 MB, o codec desenvolvido mantém um perfil de memória extremamente baixo e constante (entre 5.6 MB e 6.5 MB), independentemente do tamanho do ficheiro original. Este comportamento é superior a compressores como o BZIP2 ou XZ, cujos dicionários e janelas de compressão tendem a escalar o consumo de memória com o nível de compressão selecionado. A nossa implementação permite a compressão de modelos de grande escala (como o \texttt{model\_4.safetensors} de 4.6 GB) em máquinas com recursos de memória muito limitados.
 
 \subsubsection{Escalabilidade}
 
-Os tempos de processamento escalam linearmente com o tamanho do ficheiro:
-\begin{itemize}
-    \item \texttt{model.safetensors} (x~MB): x~s de codificação e x~s de descodificação (Fast);
-    \item \texttt{model\_4.safetensors} (x~GB): x~s de codificação e x~s de descodificação (Fast).
-\end{itemize}
+A escalabilidade da solução foi comprovada pela consistência dos resultados entre os diversos ficheiros de teste. Como demonstrado na Tabela 7 (Secção 5.2), o rácio mantém-se estável ou até melhora em modelos maiores. A arquitetura \textit{split-stream} com \textit{multithreading} (via \texttt{std::async}) no modo \textbf{Best} permite que o codec tire partido de CPUs multi-core, mitigando o esforço computacional da codificação aritmética. A integridade dos dados, verificada por MD5 em todos os casos, confirma que a robustez do sistema não é comprometida pelo aumento do volume de dados.
 
-Apesar do aumento absoluto dos tempos, o \textit{throughput} mantém-se da mesma ordem de grandeza, variando aproximadamente entre x e x~MB/s, o que demonstra boa escalabilidade do codec para modelos de maior dimensão.
+
 
 
 
@@ -693,26 +702,13 @@ Este trabalho desenvolveu um codec especializado para a compressão sem perdas d
 \begin{enumerate}
     \item \textbf{Caracterização da Fonte}: Demonstrou-se que a entropia do formato BF16 está distribuída de forma altamente desigual entre os seus componentes (2.71 vs. 7.96 bits/byte), fundamentando a estratégia de separação de canais.
     
-    \item \textbf{Superação dos Benchmarks}: O codec desenvolvido atingiu um rácio de compressão de x:1, superando todos os compressores de uso geral testados, incluindo o BZIP2 (1.44:1).
+    \item \textbf{Superação dos Benchmarks}: O codec desenvolvido atingiu um rácio de compressão de 1:50:1, superando todos os compressores de uso geral testados, incluindo o BZIP2 (1.44:1).
     
     \item \textbf{Eficiência Computacional}: O decoder Huffman otimizado com LUT de 12 bits atinge \textit{throughput} elevado, permitindo ciclos completos de codificação + descodificação em tempos competitivos para ficheiros de grande dimensão.
     
     \item \textbf{Múltiplos Pontos de Operação}: A disponibilização de dois modos (Fast e Best) permite ao utilizador escolher o compromisso ideal para o seu caso de uso.
 \end{enumerate}
 
-\subsection{Limitações e Trabalho Futuro}
-
-Identificaram-se as seguintes limitações e oportunidades de melhoria:
-
-\begin{itemize}
-    \item \textbf{Variabilidade entre modelos}: Os rácios de compressão variam significativamente entre diferentes arquiteturas de rede neuronal. Uma extensão interessante seria a implementação de um mecanismo adaptativo que selecione a estratégia ótima com base em estatísticas do bloco.
-    
-    \item \textbf{Canal LSB}: O armazenamento direto (Raw) é a única estratégia viável para dados com entropia próxima de 8 bits/byte. Técnicas mais sofisticadas, como a exploração de correlações intra-tensor ou transformadas de domínio, poderiam eventualmente reduzir a entropia efetiva deste canal.
-    
-    \item \textbf{Paralelização}: A arquitetura por blocos é intrinsecamente paralelizável. Uma implementação \textit{multi-threaded} poderia reduzir significativamente os tempos de processamento em sistemas \textit{multi-core}.
-    
-    \item \textbf{Compressores especializados}: A comparação com ferramentas específicas para \textit{floating-point} (e.g., \texttt{fpzip}, \texttt{zfp}) forneceria uma perspetiva adicional sobre o estado da arte.
-\end{itemize}
 
 \subsection{Considerações Finais}
 

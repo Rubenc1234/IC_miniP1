@@ -15,7 +15,7 @@
 #include <future>
 
 // Configurações
-const size_t BLOCK_SIZE = 1024 * 1024; // 1 MB por bloco
+const size_t BLOCK_SIZE = 1024 * 1024;
 
 // ==========================================
 // MÓDULO 1: HUFFMAN (modo Fast)atual
