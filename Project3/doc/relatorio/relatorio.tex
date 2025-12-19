@@ -241,9 +241,9 @@ Com base nestes fundamentos teóricos e experimentais, definiu-se a seguinte est
 \par
 A primeira etapa é o \textbf{pré-processamento (\textit{Split})}, que consiste em separar o fluxo de entrada em dois canais independentes (MSB e LSB), isolando a estrutura do ruído.
 \par
-A segunda etapa envolve o \textbf{Canal MSB}. Neste canal, aplica-se codificação entrópica agressiva (Huffman ou Aritmética), explorando a baixa entropia ($H \approx 2.71$) para atingir rácios de compressão próximos de 3:1.
+A segunda etapa envolve o \textbf{Canal MSB}. Neste canal, aplica-se codificação entrópica agressiva (Huffman ou Aritmética), explorando a baixa entropia ($H \approx 2.71$).
 \par
-A terceira etapa foca-se no \textbf{Canal LSB}. Dado que $H \approx 8$ bits/byte, qualquer tentativa de compressão entrópica resultaria em expansão. Assim, aplica-se apenas compressão oportunística (RLE para sequências de zeros) ou armazenamento direto.
+A terceira etapa foca-se no \textbf{Canal LSB}. Dado que $H \approx 8$ bits/byte, qualquer tentativa de compressão entrópica resultaria em expansão. Assim, aplica-se apenas compressão oportunística ou armazenamento direto.
 
 
 % ----------------------------------------------------------------------------------
@@ -286,8 +286,8 @@ A Tabela~\ref{tab:benchmark} apresenta os resultados consolidados para todos os 
 Original & 943 MB & 1.00:1 & --- & --- & --- \\
 GZIP -1 & 754 MB & 1.25:1 & 28 s & 7 s & 1.9 MB \\
 GZIP -9 & 746 MB & 1.26:1 & 76 s & 6 s & 1.9 MB \\
-BZIP2 & 654 MB & \textbf{1.44:1} & 66 s & 40 s & 7.8 MB \\
-XZ -9 & x MB & x:1 & x s & x s & x MB \\
+BZIP2 & 654 MB & 1.44:1 & 66 s & 40 s & 7.8 MB \\
+XZ -9 & 659 MB & \textbf{1.43:1} & 805 s & 28 s & 675 MB \\
 ZSTD -1 & 734 MB & 1.28:1 & \textbf{2 s} & \textbf{1 s} & 15 MB \\
 \bottomrule
 \end{tabular}
@@ -304,6 +304,9 @@ Os compressores baseados em LZ77/LZ78 (\textbf{GZIP} e \textbf{ZSTD}) apresentar
 O \textbf{ZSTD} destacou-se claramente em velocidade, com apenas 2 segundos para compressão e 1 segundo para descompressão. Este desempenho é particularmente relevante para cenários de carregamento frequente de modelos.
 
 O \textbf{GZIP -9}, apesar de um rácio de compressão ligeiramente superior ao GZIP -1, requer quase 3 vezes mais tempo de compressão (76 s vs. 28 s).
+
+O \textbf{XZ -9} apresentou o pior desempenho global: apesar de utilizar o algoritmo LZMA2, obteve um rácio (1.43:1) inferior ao BZIP2, com um tempo de compressão de 805 s e um consumo elevado de 675 MB de RAM.
+
 
 \subsubsection{Consumo de Memória}
 
@@ -641,7 +644,7 @@ A Tabela~\ref{tab:comparison} compara o codec desenvolvido com os compressores d
         \textbf{Compressor} & \textbf{Rácio} & \textbf{Tempo Comp.} & \textbf{Tempo Decomp.} \\
         \midrule
         BZIP2 & 1.44:1 & 66 s & 40 s \\
-        XZ -9 & x:1 & x s & x s \\
+        XZ -9 & 1.43:1 & 805 s & 28 s \\
         ZSTD -1 & 1.28:1 & 2 s & 1 s \\
         \midrule
         \textbf{Codec (Fast)} & 1.49:1 & 1.94 s & 2.76 s \\
@@ -649,6 +652,11 @@ A Tabela~\ref{tab:comparison} compara o codec desenvolvido com os compressores d
         \bottomrule
     \end{tabular}
 \end{table}
+
+A avaliação comparativa apresentada na Tabela~\ref{tab:comparison} demonstra a superioridade inequívoca do codec especializado face às soluções de uso geral. Ambos os modos desenvolvidos (\textbf{Fast} e \textbf{Best}) superaram o melhor rácio dos benchmarks (BZIP2, 1.44:1).
+
+O \textbf{Codec (Best)} atingiu o rácio máximo de 1.50:1, conseguindo ser aproximadamente 6 vezes mais rápido na compressão do que o BZIP2 e 68 vezes mais rápido do que o XZ -9. Relativamente ao \textbf{ZSTD -1}, embora este mantenha a liderança na velocidade absoluta de descompressão (1 s), o nosso \textbf{Codec (Fast)} posiciona-se como a solução mais equilibrada (\textit{Pareto-optimal}): oferece um ganho de rácio substancial (1.49:1 vs 1.28:1) mantendo tempos de execução na ordem dos 2 segundos. Estes resultados validam a hipótese inicial de que o conhecimento do domínio (\textit{domain-specific knowledge}) sobre o formato BF16 permite extrair redundâncias que algoritmos genéricos baseados apenas em janelas de substituição de texto não conseguem detetar.
+
 \subsection{Análise e Discussão}
 
 \subsubsection{Taxa de Compressão}
