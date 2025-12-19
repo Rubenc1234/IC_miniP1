@@ -9,6 +9,8 @@
 #include <cstring>
 #include <iomanip>
 #include <functional>
+#include <thread>
+#include <future>
 
 // ==========================================
 // DECODER HUFFMAN OTIMIZADO COM LUT
@@ -176,115 +178,134 @@ public:
     }
 };
 
-// ==========================================
-// DECODER rANS (Inverso do Best)
-// ==========================================
-class ANSDecoder {
-    static constexpr uint32_t TOT = 1u << 12;
-    static constexpr uint32_t SHIFT = 12;
-    static constexpr uint32_t MASK = TOT - 1;
+// ============================================================================
+// CLASSE: DESCODIFICADOR ARITMÉTICO OTIMIZADO (Modo Best)
+// ============================================================================
 
-    std::vector<uint32_t> freq;
-    std::vector<uint32_t> norm_freq;
-    std::vector<uint32_t> cumul;
-    std::vector<uint8_t> symtab;
+/**
+ * @brief Descodificador aritmético otimizado com buffer de 64 bits
+ * 
+ * Otimizações:
+ * - Buffer de 64 bits para leitura de bits mais eficiente
+ * - Busca binária para encontrar símbolos
+ * - Menos branches no loop principal
+ * - Acesso direto a ponteiros para frequências cumulativas
+ */
+class ArithmeticDecoder {
+    static constexpr uint64_t MAX_VALUE = 0xFFFFFFFF;
+    static constexpr uint64_t ONE_QUARTER = 0x40000000;
+    static constexpr uint64_t HALF = 0x80000000;
+    static constexpr uint64_t THREE_QUARTERS = 0xC0000000;
 
 public:
-    void rebuild(const std::vector<uint32_t>& in_freq) {
-        freq = in_freq; // Copiar frequências lidas
-        normalize_freq();
-        build_cumul_and_symtab();
+    ArithmeticDecoder() : cumulativeFreq(257, 0) {}
+
+    void rebuildModel(const uint8_t* freqTableData) {
+        const uint32_t* frequencies = reinterpret_cast<const uint32_t*>(freqTableData);
+        uint64_t total = 0;
+        for (int i = 0; i < 256; ++i) {
+            cumulativeFreq[i] = total;
+            total += frequencies[i];
+        }
+        cumulativeFreq[256] = total;
     }
 
-    void decompress(const std::vector<uint8_t>& payload, std::vector<uint8_t>& out_data, size_t original_size) {
-        out_data.clear(); out_data.resize(original_size);
+    std::vector<uint8_t> decode(const uint8_t* data, size_t size, size_t expectedSymbols) {
+        std::vector<uint8_t> output(expectedSymbols);
+        if (expectedSymbols == 0) return output;
+
+        const uint64_t totalCount = cumulativeFreq[256];
+        const uint64_t* cumFreq = cumulativeFreq.data();
         
-        if (payload.empty() || original_size == 0) return;
+        // Buffer de 64 bits para leitura eficiente
+        uint64_t bitBuffer = 0;
+        int bitsInBuffer = 0;
+        size_t bytePos = 0;
         
-        size_t ptr = 0;
-        uint64_t state = 0;
-        
-        // O encoder escreveu o estado final byte a byte (LSB first) e reverteu tudo.
-        // Após reverse, os bytes do estado final estão no início do payload (MSB first).
-        // Precisamos ler bytes até termos um estado válido >= 2^32
-        
-        // Ler os primeiros bytes para formar o estado inicial
-        // O estado foi escrito com while(state>0) push LSB, então pode ter 5-8 bytes
-        // Após reverse, lemos MSB first
-        int state_bytes = 0;
-        while (ptr < payload.size() && state_bytes < 8) {
-            state = (state << 8) | payload[ptr++];
-            state_bytes++;
-            if (state >= (1ULL << 32)) break;
+        // Pré-carregar buffer
+        while (bitsInBuffer <= 56 && bytePos < size) {
+            bitBuffer |= static_cast<uint64_t>(data[bytePos++]) << (56 - bitsInBuffer);
+            bitsInBuffer += 8;
         }
         
-        // Decode symbols in forward order
-        for (size_t i = 0; i < original_size; ++i) {
-            // 1. Find symbol from slot
-            uint32_t slot = state & MASK;
-            uint8_t s = symtab[slot];
-            out_data[i] = s;
-            
-            // 2. Update state (inverse of encode step)
-            uint32_t f = norm_freq[s];
-            uint32_t start = cumul[s];
-            state = (uint64_t)f * (state >> SHIFT) + (slot - start);
-            
-            // 3. Renormalize - read bytes while state is too small
-            while (state < (1ULL << 32) && ptr < payload.size()) {
-                state = (state << 8) | payload[ptr++];
+        // Carregar primeiros 32 bits para value
+        uint64_t value = (bitBuffer >> 32) & 0xFFFFFFFF;
+        bitBuffer <<= 32;
+        bitsInBuffer -= 32;
+        
+        // Recarregar buffer
+        while (bitsInBuffer <= 56 && bytePos < size) {
+            bitBuffer |= static_cast<uint64_t>(data[bytePos++]) << (56 - bitsInBuffer);
+            bitsInBuffer += 8;
+        }
+
+        uint64_t low = 0;
+        uint64_t high = MAX_VALUE;
+        uint8_t* outPtr = output.data();
+
+        for (size_t i = 0; i < expectedSymbols; ++i) {
+            const uint64_t range = high - low + 1;
+            const uint64_t scaledValue = ((value - low + 1) * totalCount - 1) / range;
+
+            // Busca binária otimizada
+            int sym = 0;
+            int lo = 0, hi = 255;
+            while (lo < hi) {
+                int mid = (lo + hi + 1) >> 1;
+                if (cumFreq[mid] <= scaledValue) {
+                    lo = mid;
+                } else {
+                    hi = mid - 1;
+                }
+            }
+            sym = lo;
+            outPtr[i] = static_cast<uint8_t>(sym);
+
+            const uint64_t symLow = cumFreq[sym];
+            const uint64_t symHigh = cumFreq[sym + 1];
+
+            high = low + (range * symHigh) / totalCount - 1;
+            low = low + (range * symLow) / totalCount;
+
+            // Renormalização otimizada
+            while (true) {
+                if (high < HALF) {
+                    // Nada
+                } else if (low >= HALF) {
+                    value -= HALF;
+                    low -= HALF;
+                    high -= HALF;
+                } else if (low >= ONE_QUARTER && high < THREE_QUARTERS) {
+                    value -= ONE_QUARTER;
+                    low -= ONE_QUARTER;
+                    high -= ONE_QUARTER;
+                } else {
+                    break;
+                }
+                
+                low <<= 1;
+                high = (high << 1) | 1;
+                
+                // Ler próximo bit do buffer
+                value = (value << 1) | ((bitBuffer >> 63) & 1);
+                bitBuffer <<= 1;
+                bitsInBuffer--;
+                
+                // Recarregar buffer quando necessário
+                if (bitsInBuffer <= 56 && bytePos < size) {
+                    bitBuffer |= static_cast<uint64_t>(data[bytePos++]) << (56 - bitsInBuffer);
+                    bitsInBuffer += 8;
+                }
             }
         }
+
+        return output;
     }
 
 private:
-    // Copiar a mesma lógica de normalização do Encoder para garantir simetria
-    void normalize_freq() {
-        norm_freq.assign(256, 0);
-        uint64_t total = 0;
-        for (int i = 0; i < 256; ++i) total += freq[i];
-        if (total == 0) { norm_freq[0] = TOT; return; }
-
-        double scale = static_cast<double>(TOT) / static_cast<double>(total);
-        uint32_t sum = 0;
-        for (int i = 0; i < 256; ++i) {
-            if (freq[i] == 0) continue;
-            uint32_t v = static_cast<uint32_t>(std::floor(freq[i] * scale));
-            if (v == 0) v = 1;
-            norm_freq[i] = v;
-            sum += v;
-        }
-
-        if (sum < TOT) {
-            std::vector<int> idx(256);
-            for (int i=0; i<256; ++i) idx[i]=i;
-            std::sort(idx.begin(), idx.end(), [&](int a, int b){ return freq[a] > freq[b]; });
-            size_t p=0;
-            while(sum < TOT) { 
-                int s=idx[p%256]; if(freq[s]>0) { norm_freq[s]++; sum++; } 
-                p++; 
-            }
-        } else if (sum > TOT) {
-            std::vector<int> idx(256);
-            for (int i=0; i<256; ++i) idx[i]=i;
-            std::sort(idx.begin(), idx.end(), [&](int a, int b){ return freq[a] < freq[b]; });
-            size_t p=0;
-            while(sum > TOT) {
-                int s=idx[p%256]; if(norm_freq[s]>1) { norm_freq[s]--; sum--; }
-                p++;
-            }
-        }
-    }
-
-    void build_cumul_and_symtab() {
-        cumul.assign(257, 0);
-        for (int i = 0; i < 256; ++i) cumul[i+1] = cumul[i] + norm_freq[i];
-        symtab.assign(TOT, 0);
-        for (int s = 0; s < 256; ++s) {
-            for (uint32_t pos = cumul[s]; pos < cumul[s+1]; ++pos) symtab[pos] = static_cast<uint8_t>(s);
-        }
-    }
+    std::vector<uint64_t> cumulativeFreq;
 };
+
 
 // ==========================================
 // MAIN
@@ -311,10 +332,9 @@ int main(int argc, char* argv[]) {
     in.read((char*)&mode_flag, 1);
     bool use_best = (mode_flag == 1);
     
-    std::cout << "A descodificar... Modo: " << (use_best ? "BEST (rANS)" : "FAST (Huffman)") << std::endl;
+    std::cout << "A descodificar... Modo: " << (use_best ? "BEST (Arithmetic)" : "FAST (Huffman)") << std::endl;
 
     HuffmanDecoder hd;
-    ANSDecoder ans;
 
     // 3. Loop de Blocos
     while (in.peek() != EOF) {
@@ -324,35 +344,60 @@ int main(int argc, char* argv[]) {
         in.read((char*)&sz_l, 4);
 
         // Ler MSB e LSB
-        std::vector<uint8_t> msb_packet(sz_m), lsb(sz_l);
+        std::vector<uint8_t> msb_packet(sz_m), lsb_packet(sz_l);
         in.read((char*)msb_packet.data(), sz_m);
-        in.read((char*)lsb.data(), sz_l);
+        in.read((char*)lsb_packet.data(), sz_l);
 
         // --- Recuperar Tabela de Frequências (1024 bytes) ---
         if (sz_m < 1024) { std::cerr << "Erro: Bloco inválido." << std::endl; return 1; }
-        std::vector<uint32_t> freqs(256);
-        // O encoder escreveu uint32 em little-endian. Em x86 é direto.
-        memcpy(freqs.data(), msb_packet.data(), 1024);
         
-        // Payload começa após os 1024 bytes
-        std::vector<uint8_t> payload(msb_packet.begin() + 1024, msb_packet.end());
-        std::vector<uint8_t> msb;
-
-        // --- Descompressão MSB ---
+        std::vector<uint8_t> msb, lsb_decoded;
+        size_t num_pairs;
+        
         if (use_best) {
-            ans.rebuild(freqs);
-            ans.decompress(payload, msb, lsb.size()); // Size MSB == Size LSB
+            // Modo best: MSB e LSB com Arithmetic (paralelo)
+            if (sz_l < 1024) { std::cerr << "Erro: Bloco LSB inválido." << std::endl; return 1; }
+            
+            // Calcular tamanho original a partir das frequências LSB
+            const uint32_t* lsb_freqs = reinterpret_cast<const uint32_t*>(lsb_packet.data());
+            uint64_t lsb_total = 0;
+            for (int i = 0; i < 256; ++i) lsb_total += lsb_freqs[i];
+            num_pairs = lsb_total - 256;  // -256 por causa do Laplace smoothing
+            
+            // Descodificação paralela de MSB e LSB
+            auto msb_future = std::async(std::launch::async, [&]() {
+                ArithmeticDecoder arith_msb;
+                arith_msb.rebuildModel(msb_packet.data());
+                return arith_msb.decode(msb_packet.data() + 1024, sz_m - 1024, num_pairs);
+            });
+            
+            auto lsb_future = std::async(std::launch::async, [&]() {
+                ArithmeticDecoder arith_lsb;
+                arith_lsb.rebuildModel(lsb_packet.data());
+                return arith_lsb.decode(lsb_packet.data() + 1024, sz_l - 1024, num_pairs);
+            });
+            
+            msb = msb_future.get();
+            lsb_decoded = lsb_future.get();
         } else {
+            lsb_decoded = std::move(lsb_packet);
+            num_pairs = lsb_decoded.size();
+            
+            std::vector<uint32_t> freqs(256);
+            memcpy(freqs.data(), msb_packet.data(), 1024);
             hd.rebuild(freqs);
-            hd.decompress(payload, msb, lsb.size());
+            hd.decompress(std::vector<uint8_t>(msb_packet.begin() + 1024, msb_packet.end()), msb, num_pairs);
         }
 
-        // --- Merge (LSB, MSB, LSB, MSB...) ---
-        std::vector<char> buffer;
-        buffer.reserve(lsb.size() * 2);
-        for (size_t i = 0; i < lsb.size(); ++i) {
-            buffer.push_back((char)lsb[i]);
-            buffer.push_back((char)msb[i]);
+        // --- Merge otimizado (LSB, MSB, LSB, MSB...) ---
+        std::vector<char> buffer(num_pairs * 2);
+        char* buf_ptr = buffer.data();
+        const uint8_t* lsb_ptr = lsb_decoded.data();
+        const uint8_t* msb_ptr = msb.data();
+        
+        for (size_t i = 0; i < num_pairs; ++i) {
+            buf_ptr[i * 2] = static_cast<char>(lsb_ptr[i]);
+            buf_ptr[i * 2 + 1] = static_cast<char>(msb_ptr[i]);
         }
         out.write(buffer.data(), buffer.size());
     }

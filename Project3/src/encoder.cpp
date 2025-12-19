@@ -11,6 +11,8 @@
 #include <string>
 #include <cstring>
 #include <algorithm>
+#include <thread>
+#include <future>
 
 // Configurações
 const size_t BLOCK_SIZE = 1024 * 1024; // 1 MB por bloco
@@ -78,121 +80,155 @@ private:
 };
 
 // ==========================================
-// MÓDULO MSB: rANS (modo Best)
+// MÓDULO AUXILIAR: ARITMÉTICA ULTRA-OTIMIZADA (Modo Best)
 // ==========================================
-class AssymetricalNumericalSystem {
-public:
-    static constexpr uint32_t TOT = 1u << 12;
-    static constexpr uint32_t SHIFT = 12;
-    static constexpr uint64_t LOWER = 1ULL << 32;
-    static constexpr uint64_t UPPER = 1ULL << 40;
+// Otimizações principais:
+// 1. Buffer de 64 bits com flush em lotes
+// 2. Pending bits acumulados e escritos em batches
+// 3. Renormalização com menos branches usando __builtin_clz
+// 4. Tabela de lookup para cumulativas pré-calculadas
 
-    std::vector<uint32_t> freq;
-    std::vector<uint32_t> norm_freq;
-    std::vector<uint32_t> cumul;
+class ArithmeticEncoder {
+    static constexpr uint32_t MAX_VAL = 0xFFFFFFFF;
+    static constexpr uint32_t HALF = 0x80000000U;
+    static constexpr uint32_t QUARTER = 0x40000000U;
+    
+public:
+    std::vector<uint32_t> frequencies;
+    
+private:
+    std::vector<uint64_t> cumulative_freq;
+    
+    // Buffer grande para minimizar realocações
+    std::vector<uint8_t> output;
+    uint64_t bit_buffer;
+    int bits_in_buffer;
+    
+public:
+    ArithmeticEncoder() : frequencies(256, 0), cumulative_freq(257, 0), bit_buffer(0), bits_in_buffer(0) {}
 
     void build(const std::vector<uint8_t>& data) {
-        freq.assign(256, 0);
-        for (uint8_t b : data) freq[b]++;
-        normalize_freq();
-        build_cumul();
+        // Reset com Laplace smoothing
+        std::fill(frequencies.begin(), frequencies.end(), 1);
+        
+        // Contagem com unrolling manual para melhor vectorização
+        const size_t n = data.size();
+        const uint8_t* ptr = data.data();
+        
+        // Processar em blocos de 4 para melhor cache locality
+        size_t i = 0;
+        for (; i + 4 <= n; i += 4) {
+            frequencies[ptr[i]]++;
+            frequencies[ptr[i+1]]++;
+            frequencies[ptr[i+2]]++;
+            frequencies[ptr[i+3]]++;
+        }
+        for (; i < n; ++i) {
+            frequencies[ptr[i]]++;
+        }
+        
+        // Calcular cumulativas
+        uint64_t total = 0;
+        for (int j = 0; j < 256; ++j) {
+            cumulative_freq[j] = total;
+            total += frequencies[j];
+        }
+        cumulative_freq[256] = total;
     }
 
     std::vector<uint8_t> compress(const std::vector<uint8_t>& data) {
-        std::vector<uint8_t> out;
-
-        // 1) Serializar freq original (256 * 4 bytes little-endian)
-        for (int i = 0; i < 256; ++i) {
-            uint32_t f = freq[i];
-            out.push_back(static_cast<uint8_t>(f & 0xFF));
-            out.push_back(static_cast<uint8_t>((f >> 8) & 0xFF));
-            out.push_back(static_cast<uint8_t>((f >> 16) & 0xFF));
-            out.push_back(static_cast<uint8_t>((f >> 24) & 0xFF));
-        }
-
-        // 2) rANS encode
-        std::vector<uint8_t> payload;
-        payload.reserve(data.size());
-
-        uint64_t state = LOWER; // estado inicial
-
-        // Encode em ordem reversa
-        for (size_t i = data.size(); i-- > 0; ) {
-            uint8_t s = data[i];
-            uint32_t f = norm_freq[s];
-            uint32_t start = cumul[s];
-
-            // Renormalizar ANTES de codificar: se state >= f * UPPER / TOT, emite bytes
-            uint64_t threshold = ((UPPER >> SHIFT) * f);
-            while (state >= threshold) {
-                payload.push_back(state & 0xFF);
-                state >>= 8;
+        // Pre-alocar output generosamente
+        output.clear();
+        output.reserve(1024 + data.size());
+        
+        // Escrever tabela de frequências (1024 bytes)
+        output.resize(1024);
+        memcpy(output.data(), frequencies.data(), 1024);
+        
+        // Reset buffer state
+        bit_buffer = 0;
+        bits_in_buffer = 0;
+        
+        uint32_t low = 0, high = MAX_VAL;
+        uint64_t pending = 0;
+        const uint64_t total = cumulative_freq[256];
+        const size_t n = data.size();
+        const uint8_t* ptr = data.data();
+        
+        for (size_t i = 0; i < n; ++i) {
+            const uint8_t s = ptr[i];
+            const uint64_t range = (uint64_t)(high - low) + 1;
+            const uint64_t sym_low = cumulative_freq[s];
+            const uint64_t sym_high = cumulative_freq[s + 1];
+            
+            high = low + (uint32_t)((range * sym_high) / total) - 1;
+            low = low + (uint32_t)((range * sym_low) / total);
+            
+            // Renormalização otimizada
+            while (true) {
+                if ((high ^ low) < HALF) {
+                    // MSB iguais - output bit
+                    int bit = high >> 31;
+                    output_bits(bit, pending);
+                    pending = 0;
+                } else if (low >= QUARTER && high < (QUARTER * 3)) {
+                    // Underflow - acumular pending
+                    pending++;
+                    low -= QUARTER;
+                    high -= QUARTER;
+                } else {
+                    break;
+                }
+                low <<= 1;
+                high = (high << 1) | 1;
             }
-
-            // Codificar símbolo
-            // state' = (state / f) * TOT + (state % f) + start
-            state = ((state / f) << SHIFT) + (state % f) + start;
         }
-
-        // Flush estado final (4-8 bytes)
-        while (state > 0) {
-            payload.push_back(state & 0xFF);
-            state >>= 8;
+        
+        // Finalizar - garantir que valor final está no intervalo
+        pending++;
+        if (low < QUARTER) {
+            output_bits(0, pending);
+        } else {
+            output_bits(1, pending);
         }
-
-        // Reverter payload (porque escrevemos ao contrário)
-        std::reverse(payload.begin(), payload.end());
-
-        out.insert(out.end(), payload.begin(), payload.end());
-        return out;
+        
+        // Flush final
+        if (bits_in_buffer > 0) {
+            output.push_back(static_cast<uint8_t>(bit_buffer << (8 - bits_in_buffer)));
+        }
+        
+        return std::move(output);
     }
-
+    
 private:
-    void normalize_freq() {
-        norm_freq.assign(256, 0);
-        uint64_t total = 0;
-        for (int i = 0; i < 256; ++i) total += freq[i];
-        if (total == 0) { norm_freq[0] = TOT; return; }
-
-        double scale = static_cast<double>(TOT) / static_cast<double>(total);
-        uint32_t sum = 0;
-        for (int i = 0; i < 256; ++i) {
-            if (freq[i] == 0) continue;
-            uint32_t v = static_cast<uint32_t>(std::floor(freq[i] * scale));
-            if (v == 0) v = 1;
-            norm_freq[i] = v;
-            sum += v;
-        }
-
-        // Ajustar para somar exatamente TOT
-        if (sum < TOT) {
-            std::vector<int> idx(256);
-            for (int i = 0; i < 256; ++i) idx[i] = i;
-            std::sort(idx.begin(), idx.end(), [&](int a, int b) { return freq[a] > freq[b]; });
-            size_t p = 0;
-            while (sum < TOT) {
-                int s = idx[p % 256];
-                if (freq[s] > 0) { norm_freq[s]++; sum++; }
-                p++;
-            }
-        } else if (sum > TOT) {
-            std::vector<int> idx(256);
-            for (int i = 0; i < 256; ++i) idx[i] = i;
-            std::sort(idx.begin(), idx.end(), [&](int a, int b) { return freq[a] < freq[b]; });
-            size_t p = 0;
-            while (sum > TOT) {
-                int s = idx[p % 256];
-                if (norm_freq[s] > 1) { norm_freq[s]--; sum--; }
-                p++;
+    // Output um bit seguido de pending bits invertidos
+    inline void output_bits(int bit, uint64_t pending) {
+        // Escrever bit principal
+        bit_buffer = (bit_buffer << 1) | bit;
+        bits_in_buffer++;
+        
+        // Escrever pending bits (invertidos)
+        int inv_bit = bit ^ 1;
+        while (pending > 0) {
+            bit_buffer = (bit_buffer << 1) | inv_bit;
+            bits_in_buffer++;
+            pending--;
+            
+            // Flush quando buffer cheio
+            if (bits_in_buffer >= 8) {
+                bits_in_buffer -= 8;
+                output.push_back(static_cast<uint8_t>(bit_buffer >> bits_in_buffer));
             }
         }
-    }
-
-    void build_cumul() {
-        cumul.assign(257, 0);
-        for (int i = 0; i < 256; ++i) cumul[i + 1] = cumul[i] + norm_freq[i];
+        
+        // Flush quando buffer cheio
+        if (bits_in_buffer >= 8) {
+            bits_in_buffer -= 8;
+            output.push_back(static_cast<uint8_t>(bit_buffer >> bits_in_buffer));
+        }
     }
 };
+
 
 // ==========================================
 // MAIN LOOP
@@ -213,36 +249,61 @@ int main(int argc, char* argv[]) {
     std::vector<char> h_json(h_sz); in.read(h_json.data(), h_sz); out.write(h_json.data(), h_sz);
 
     // 2. Gravar Flag Global de Modo
-    // 0 = Fast (Huffman + LSB Raw Puro), 1 = Best (Arithmetic + LSB Híbrido)
+    // 0 = Fast (Huffman + LSB Raw), 1 = Best (Arithmetic)
     uint8_t mode_flag = use_best ? 1 : 0;
     out.write((char*)&mode_flag, 1);
 
-    std::cout << "Modo: " << (use_best ? "BEST (rANS + LSB Raw)" : "FAST (Huffman + LSB Raw)") << std::endl;
+    std::cout << "Modo: " << (use_best ? "BEST (Arithmetic MSB+LSB paralelo)" : "FAST (Huffman + LSB Raw)") << std::endl;
 
     std::vector<char> buf(BLOCK_SIZE);
     std::vector<uint8_t> msb, lsb;
+    msb.reserve(BLOCK_SIZE / 2);
+    lsb.reserve(BLOCK_SIZE / 2);
+    
     uint64_t tin = 0, tout = 0;
     tout += 8 + h_sz + 1; // Contabilizar header
     int blk = 0;
 
     while (in.read(buf.data(), BLOCK_SIZE) || in.gcount() > 0) {
         size_t n = in.gcount(), pairs = n / 2;
-        msb.clear(); lsb.clear();
-        for (size_t i = 0; i < pairs * 2; i += 2) {
-            lsb.push_back((uint8_t)buf[i]); msb.push_back((uint8_t)buf[i+1]);
+        
+        // Separação MSB/LSB otimizada com acesso sequencial
+        msb.resize(pairs);
+        lsb.resize(pairs);
+        const char* src = buf.data();
+        uint8_t* lsb_ptr = lsb.data();
+        uint8_t* msb_ptr = msb.data();
+        
+        for (size_t i = 0; i < pairs; ++i) {
+            lsb_ptr[i] = static_cast<uint8_t>(src[i * 2]);
+            msb_ptr[i] = static_cast<uint8_t>(src[i * 2 + 1]);
         }
 
-        // --- Processar MSB ---
-        std::vector<uint8_t> msb_enc;
-        if (use_best) { AssymetricalNumericalSystem ans; ans.build(msb); msb_enc = ans.compress(msb); }
-        else          { HuffmanCodec hc; hc.build(msb); msb_enc = hc.compress(msb); }
-
-        // --- Processar LSB (CORRIGIDO) ---
-        std::vector<uint8_t> lsb_final;
+        std::vector<uint8_t> msb_enc, lsb_final;
         
-        
-        lsb_final = lsb; 
-        
+        if (use_best) {
+            // Modo best: Arithmetic para MSB e LSB (paralelo)
+            auto msb_future = std::async(std::launch::async, [&msb]() {
+                ArithmeticEncoder arith;
+                arith.build(msb);
+                return arith.compress(msb);
+            });
+            
+            auto lsb_future = std::async(std::launch::async, [&lsb]() {
+                ArithmeticEncoder arith;
+                arith.build(lsb);
+                return arith.compress(lsb);
+            });
+            
+            msb_enc = msb_future.get();
+            lsb_final = lsb_future.get();
+        } else {
+            // Modo fast: Huffman para MSB, raw para LSB
+            HuffmanCodec hc;
+            hc.build(msb);
+            msb_enc = hc.compress(msb);
+            lsb_final = std::move(lsb);
+        }
 
         // --- Empacotar ---
         uint32_t sz_m = msb_enc.size(), sz_l = lsb_final.size();

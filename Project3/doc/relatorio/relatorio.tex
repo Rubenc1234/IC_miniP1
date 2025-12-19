@@ -369,13 +369,23 @@ O ficheiro de saída (\texttt{.sc} -- \textit{SafeTensors Compressed}) possui a 
 \begin{verbatim}
 [Header Size: 8 bytes]
 [Header JSON: variável]
-[Bloco 1: MSB comprimido | LSB raw]
-[Bloco 2: MSB comprimido | LSB raw]
+[Mode Flag: 1 byte (0=FAST, 1=BEST)]
+[Bloco 1]
+[Bloco 2]
 ...
-[Bloco N: MSB comprimido | LSB raw]
+[Bloco N]
 \end{verbatim}
 
-O cabeçalho JSON original é preservado integralmente para garantir a compatibilidade com ferramentas existentes.
+Cada bloco possui a seguinte estrutura interna:
+
+\begin{verbatim}
+[sz_m: 4 bytes (tamanho do pacote MSB)]
+[sz_l: 4 bytes (tamanho do pacote LSB)]
+[Pacote MSB: sz_m bytes]
+[Pacote LSB: sz_l bytes]
+\end{verbatim}
+
+O cabeçalho JSON original é preservado integralmente para garantir a compatibilidade com ferramentas existentes. O \textit{mode flag} permite ao descodificador identificar automaticamente o algoritmo utilizado.
 
 \subsection{Estratégia para o Canal MSB}
 
@@ -418,13 +428,13 @@ Implementação clássica com tabela de códigos pré-calculada (\textit{Look-Up
 
 A codificação utiliza um \textit{buffer} de bits acumulado em variável de 64 bits, emitindo bytes completos para o fluxo de saída à medida que ficam disponíveis. Esta técnica elimina operações bit-a-bit individuais, maximizando o desempenho.
 
-\paragraph{Codificação rANS (\textit{Asymmetric Numeral Systems})}
-Implementação de rANS (\textit{range Asymmetric Numeral Systems}), uma técnica moderna de codificação entrópica que oferece compressão próxima da entropia com desempenho computacional superior ao da codificação aritmética tradicional. As principais características da implementação são:
+\paragraph{Codificação Aritmética}
+Implementação de codificação aritmética, uma técnica de codificação entrópica que oferece compressão próxima da entropia teórica. As principais características da implementação são:
 
 \begin{itemize}
-    \item \textbf{Precisão}: Utiliza uma tabela de frequências normalizada para $2^{12}$ (4096) símbolos totais;
-    \item \textbf{Estado}: Mantém um estado de 64 bits com limites $[2^{32}, 2^{40})$ para garantir precisão;
-    \item \textbf{Codificação inversa}: Os símbolos são codificados em ordem reversa, permitindo descodificação em ordem direta.
+    \item \textbf{Precisão}: Utiliza aritmética de 32 bits com intervalos $[low, high]$ normalizados;
+    \item \textbf{Buffer de 64 bits}: Acumulação eficiente de bits com \textit{flush} em lotes para minimizar operações de I/O;
+    \item \textbf{Pending bits}: Gestão de bits pendentes para tratar situações de \textit{underflow} durante a renormalização.
 \end{itemize}
 
 A Tabela~\ref{tab:entropy_bench} compara o desempenho dos dois algoritmos implementados:
@@ -437,21 +447,21 @@ A Tabela~\ref{tab:entropy_bench} compara o desempenho dos dois algoritmos implem
         \toprule
         \textbf{Algoritmo} & \textbf{Tamanho Final} & \textbf{Tempo Cod.} & \textbf{Tempo Dec.} \\
         \midrule
-        Huffman (LUT) & 633.08 MB & \textbf{4.0 s} & \textbf{3.9 s} \\
-        rANS & \textbf{631.13 MB} & 4.8 s & 4.5 s \\
+        Huffman (LUT) & x MB & \textbf{x s} & \textbf{x s} \\
+        Aritmética & \textbf{x MB} & x s & x s \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-A codificação rANS permitiu uma redução de $\approx 2$ MB comparativamente ao Huffman, o que se explica teoricamente pela sua capacidade de alocar um número fracionário de bits por símbolo. O decoder Huffman foi otimizado com uma \textit{Look-Up Table} (LUT) de 12 bits, permitindo descodificar múltiplos bits por operação e atingindo tempos competitivos com o rANS.
+A codificação aritmética permite uma melhor aproximação à entropia teórica comparativamente ao Huffman, o que se explica pela sua capacidade de alocar um número fracionário de bits por símbolo.
 
 \subsection{Estratégia para o Canal LSB}
 
-O canal LSB, com entropia de 7.96 bits/byte, apresenta características de ruído quase uniforme. Neste contexto, algoritmos de compressão entrópica tradicionais não só são ineficazes como podem resultar em \textbf{expansão} dos dados.
+O canal LSB, com entropia de 7.96 bits/byte, apresenta características de ruído quase uniforme. A estratégia de compressão varia consoante o modo de operação selecionado.
 
-\subsubsection{Armazenamento Direto (Raw)}
+\subsubsection{Modo FAST: Armazenamento Direto (Raw)}
 
-Após análise experimental, optou-se por uma estratégia de armazenamento direto para o canal LSB:
+No modo FAST, optou-se por uma estratégia de armazenamento direto para o canal LSB:
 
 \begin{itemize}
     \item A entropia do canal LSB ($\approx 7.96$ bits/byte) está muito próxima do máximo teórico de 8 bits/byte;
@@ -459,7 +469,17 @@ Após análise experimental, optou-se por uma estratégia de armazenamento diret
     \item A cópia direta (\textit{Raw}) é computacionalmente eficiente e não introduz latência adicional.
 \end{itemize}
 
-\textbf{Decisão de Engenharia}: Os dados do canal LSB são copiados diretamente para o ficheiro comprimido sem qualquer transformação. Esta abordagem simplifica significativamente a implementação e maximiza a velocidade de processamento sem comprometer a taxa de compressão global.
+\textbf{Decisão de Engenharia}: No modo FAST, os dados do canal LSB são copiados diretamente para o ficheiro comprimido sem qualquer transformação. Esta abordagem simplifica significativamente a implementação e maximiza a velocidade de processamento.
+
+\subsubsection{Modo BEST: Codificação Aritmética}
+
+No modo BEST, o canal LSB é também comprimido utilizando codificação aritmética, apesar da sua entropia elevada. Esta decisão justifica-se por:
+
+\begin{itemize}
+    \item Embora os ganhos sejam marginais, a codificação aritmética não expande os dados significativamente mesmo para fontes de alta entropia;
+    \item O processamento paralelo (MSB e LSB em \textit{threads} separadas) mitiga o custo computacional adicional;
+    \item Permite obter a taxa de compressão máxima possível para utilizadores que privilegiam o tamanho sobre a velocidade.
+\end{itemize}
 
 \subsection{Modos de Operação}
 
@@ -468,12 +488,14 @@ Para satisfazer o requisito de múltiplos pontos de operação, o codec oferece 
 \begin{tcolorbox}[colback=yellow!10!white, colframe=yellow!75!black, title=Modos de Operação]
 \begin{itemize}
     \item \textbf{Modo FAST}: Huffman com LUT (MSB) + Raw (LSB) \\
-    \textit{Desempenho equilibrado entre codificação e descodificação}
+    \textit{Otimizado para velocidade de codificação e descodificação}
     
-    \item \textbf{Modo BEST}: rANS (MSB) + Raw (LSB) \\
-    \textit{Maximiza a taxa de compressão ($\approx$ 0.3\% melhor)}
+    \item \textbf{Modo BEST}: Aritmética (MSB) + Aritmética (LSB) em paralelo \\
+    \textit{Maximiza a taxa de compressão utilizando processamento paralelo com \texttt{std::async}}
 \end{itemize}
 \end{tcolorbox}
+
+No modo BEST, a compressão dos canais MSB e LSB é executada em paralelo utilizando \texttt{std::async}, permitindo explorar múltiplos núcleos do processador e mitigando o custo computacional adicional da codificação aritmética.
 
 \subsection{Gestão de Memória}
 
@@ -527,24 +549,24 @@ A Tabela~\ref{tab:testes_resultados} apresenta os resultados completos para todo
         \textbf{Modelo} & \textbf{Modo} & \textbf{Original} & \textbf{Comprimido} & \textbf{Rácio} & \textbf{T. Cod.} & \textbf{T. Dec.} \\
         \midrule
         \multirow{2}{*}{\texttt{model.safetensors}} 
-        & Fast & 943 MB & 634 MB & 1.487:1 & 9.1 s & 9.9 s \\
-        & Best & 943 MB & 632 MB & 1.491:1 & 14.2 s & 12.5 s \\
+        & Fast & x MB & x MB & x:1 & x s & x s \\
+        & Best & x MB & x MB & x:1 & x s & x s \\
         \midrule
         \multirow{2}{*}{\texttt{model\_1.safetensors}} 
-        & Fast & 453 MB & 375 MB & 1.209:1 & 4.0 s & 5.3 s \\
-        & Best & 453 MB & 373 MB & 1.216:1 & 6.6 s & 5.7 s \\
+        & Fast & x MB & x MB & x:1 & x s & x s \\
+        & Best & x MB & x MB & x:1 & x s & x s \\
         \midrule
         \multirow{2}{*}{\texttt{model\_2.safetensors}} 
-        & Fast & 583 MB & 494 MB & 1.182:1 & 5.1 s & 7.1 s \\
-        & Best & 583 MB & 493 MB & 1.184:1 & 8.4 s & 7.4 s \\
+        & Fast & x MB & x MB & x:1 & x s & x s \\
+        & Best & x MB & x MB & x:1 & x s & x s \\
         \midrule
         \multirow{2}{*}{\texttt{model\_3.safetensors}} 
-        & Fast & 2.1 GB & 1.41 GB & 1.490:1 & 17.7 s & 39.1 s \\
-        & Best & 2.1 GB & 1.40 GB & 1.495:1 & 30.6 s & 42.1 s \\
+        & Fast & x GB & x GB & x:1 & x s & x s \\
+        & Best & x GB & x GB & x:1 & x s & x s \\
         \midrule
         \multirow{2}{*}{\texttt{model\_4.safetensors}} 
-        & Fast & 3.9 GB & 3.51 GB & 1.120:1 & 35.8 s & 77.4 s \\
-        & Best & 3.9 GB & 3.51 GB & 1.121:1 & 67.0 s & 52.6 s \\
+        & Fast & x GB & x GB & x:1 & x s & x s \\
+        & Best & x GB & x GB & x:1 & x s & x s \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -581,8 +603,8 @@ A Tabela~\ref{tab:comparison} compara o codec desenvolvido com os compressores d
         XZ -9 & 1.43:1 & 933 s & 35 s \\
         ZSTD -1 & 1.29:1 & 3 s & 1 s \\
         \midrule
-        \textbf{Codec (Fast)} & 1.49:1 & 9.1 s & 9.9 s \\
-        \textbf{Codec (Best)} & 1.49:1 & 14.2 s & 12.5 s \\
+        \textbf{Codec (Fast)} & x:1 & x s & x s \\
+        \textbf{Codec (Best)} & x:1 & x s & x s \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -591,7 +613,7 @@ A Tabela~\ref{tab:comparison} compara o codec desenvolvido com os compressores d
 
 \subsubsection{Taxa de Compressão}
 
-O codec desenvolvido \textbf{superou todos os compressores de uso geral testados}, atingindo um rácio de 1.49:1 no modelo principal, comparado com 1.44:1 do melhor compressor genérico (BZIP2). Esta melhoria de 3.5\% representa uma poupança adicional de aproximadamente 310 MB no ficheiro de 943 MB.
+O codec desenvolvido \textbf{superou todos os compressores de uso geral testados}, atingindo um rácio de x:1 no modelo principal, comparado com 1.44:1 do melhor compressor genérico (BZIP2). Esta melhoria representa uma poupança adicional significativa no ficheiro original.
 
 A superioridade do codec especializado deve-se à exploração direta da estrutura do formato BF16, que os compressores genéricos tratam como dados opacos.
 
@@ -599,9 +621,9 @@ A superioridade do codec especializado deve-se à exploração direta da estrutu
 
 Observou-se uma variação significativa nos rácios de compressão entre diferentes modelos:
 \begin{itemize}
-    \item \textbf{\texttt{model.safetensors}}: Rácio elevado ($\approx$ 1.49:1);
-    \item \textbf{\texttt{model\_1/2/3.safetensors}}: Rácio moderado ($\approx$ 1.18--1.21:1);
-    \item \textbf{\texttt{model\_4.safetensors}}: Rácio reduzido ($\approx$ 1.12:1).
+    \item \textbf{\texttt{model.safetensors}}: Rácio elevado ($\approx$ x:1);
+    \item \textbf{\texttt{model\_1/2/3.safetensors}}: Rácio moderado ($\approx$ x:1);
+    \item \textbf{\texttt{model\_4.safetensors}}: Rácio reduzido ($\approx$ x:1).
 \end{itemize}
 
 
@@ -611,8 +633,8 @@ Esta variação sugere que diferentes arquiteturas de rede neuronal apresentam d
 
 Ambos os modos oferecem desempenho consistente após a otimização do decoder Huffman, com LUT:
 \begin{itemize}
-    \item \textbf{Modo Fast}: Para o modelo principal (\texttt{model.safetensors}), a codificação foi concluída em 9.1~s e a descodificação em 9.9~s;
-    \item \textbf{Modo Best}: A codificação aumentou para 14.2~s e a descodificação para 12.5~s, proporcionando uma melhoria marginal na taxa de compressão.
+    \item \textbf{Modo Fast}: Para o modelo principal (\texttt{model.safetensors}), a codificação foi concluída em x~s e a descodificação em x~s;
+    \item \textbf{Modo Best}: A codificação aumentou para x~s e a descodificação para x~s, proporcionando uma melhoria marginal na taxa de compressão.
 \end{itemize}
 
 Comparativamente aos compressores de uso geral, o codec desenvolvido apresenta:
@@ -629,13 +651,13 @@ A Tabela~\ref{tab:ram_peak} mostra o uso máximo de memória residente (RAM) dur
 \centering
 \begin{tabular}{lcccc}
 \hline
-\textbf{Modelo} & \textbf{BEST Cod. (MB)} & \textbf{BEST Dec. (MB)} & \textbf{FAST Cod. (MB)} & \textbf{FAST Dec. (MB)} \\
+\textbf{Modelo} & \textbf{BEST Cod. (kB)} & \textbf{BEST Dec. (kB)} & \textbf{FAST Cod. (kB)} & \textbf{FAST Dec. (kB)} \\
 \hline
-model\_1 & 6696 & 6840 & 6588 & 6348 \\
-model\_2 & 6520 & 6916 & 6540 & 6164 \\
-model\_3 & 6360 & 6212 & 6404 & 6160 \\
-model & 6368 & 6216 & 6416 & 6300 \\
-model\_4 & 6684 & 6728 &  6724 &  6364 \\
+model\_1 & x & x & x & x \\
+model\_2 & x & x & x & x \\
+model\_3 & x & x & x & x \\
+model & x & x & x & x \\
+model\_4 & x & x & x & x \\
 \hline
 \end{tabular}
 \caption{Pico de RAM (em kB) durante codificação e decodificação para cada modelo.}
@@ -648,11 +670,11 @@ Observa-se que o pico de RAM é similar entre os modos, com variações pequenas
 
 Os tempos de processamento escalam linearmente com o tamanho do ficheiro:
 \begin{itemize}
-    \item \texttt{model.safetensors} (943~MB): 9.1~s de codificação e 9.9~s de descodificação (Fast);
-    \item \texttt{model\_4.safetensors} (3.9~GB): 35.8~s de codificação e 77.4~s de descodificação (Fast).
+    \item \texttt{model.safetensors} (x~MB): x~s de codificação e x~s de descodificação (Fast);
+    \item \texttt{model\_4.safetensors} (x~GB): x~s de codificação e x~s de descodificação (Fast).
 \end{itemize}
 
-Apesar do aumento absoluto dos tempos, o \textit{throughput} mantém-se da mesma ordem de grandeza, variando aproximadamente entre 51 e 111~MB/s, o que demonstra boa escalabilidade do codec para modelos de maior dimensão.
+Apesar do aumento absoluto dos tempos, o \textit{throughput} mantém-se da mesma ordem de grandeza, variando aproximadamente entre x e x~MB/s, o que demonstra boa escalabilidade do codec para modelos de maior dimensão.
 
 
 
@@ -671,9 +693,9 @@ Este trabalho desenvolveu um codec especializado para a compressão sem perdas d
 \begin{enumerate}
     \item \textbf{Caracterização da Fonte}: Demonstrou-se que a entropia do formato BF16 está distribuída de forma altamente desigual entre os seus componentes (2.71 vs. 7.96 bits/byte), fundamentando a estratégia de separação de canais.
     
-    \item \textbf{Superação dos Benchmarks}: O codec desenvolvido atingiu um rácio de compressão de 1.49:1, superando todos os compressores de uso geral testados, incluindo o BZIP2 (1.44:1).
+    \item \textbf{Superação dos Benchmarks}: O codec desenvolvido atingiu um rácio de compressão de x:1, superando todos os compressores de uso geral testados, incluindo o BZIP2 (1.44:1).
     
-    \item \textbf{Eficiência Computacional}: O decoder Huffman otimizado com LUT de 12 bits atinge \textit{throughput} de $\approx$ 240 MB/s, permitindo ciclos completos de codificação + descodificação em menos de 8 segundos para ficheiros de 1 GB.
+    \item \textbf{Eficiência Computacional}: O decoder Huffman otimizado com LUT de 12 bits atinge \textit{throughput} elevado, permitindo ciclos completos de codificação + descodificação em tempos competitivos para ficheiros de grande dimensão.
     
     \item \textbf{Múltiplos Pontos de Operação}: A disponibilização de dois modos (Fast e Best) permite ao utilizador escolher o compromisso ideal para o seu caso de uso.
 \end{enumerate}
