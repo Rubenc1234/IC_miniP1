@@ -76,7 +76,7 @@
     \textit{Departamento de Eletrónica, Telecomunicações e Informática (DETI)} \\
     \textit{Universidade de Aveiro}
 }
-\date{Janeiro de 2025}
+\date{Dezembro de 2025}
 
 % --- INÍCIO DO DOCUMENTO ---
 \begin{document}
@@ -125,25 +125,29 @@ O desenho de um codec eficiente exige uma compreensão profunda da natureza esta
 
 \subsection{Estrutura do Ficheiro SafeTensors}
 
-O formato SafeTensors, desenvolvido pela Hugging Face, é um formato binário otimizado para o armazenamento seguro de tensores. A estrutura do ficheiro é composta por:
+O formato SafeTensors, desenvolvido pela Hugging Face, é um formato binário otimizado para o armazenamento seguro de tensores. 
+A estrutura do ficheiro está dividida em três partes: o cabeçalho, o cabeçalho JSON e o \textit{payload} binário.
 
-\begin{enumerate}
-    \item \textbf{Cabeçalho de Tamanho} (8 bytes): Um inteiro de 64 bits em formato \textit{little-endian} que indica o tamanho do cabeçalho JSON;
-    \item \textbf{Cabeçalho JSON} (variável): Metadados que descrevem cada tensor, incluindo nome, tipo de dados (\textit{dtype}), dimensões e \textit{offsets} no \textit{payload};
-    \item \textbf{Payload Binário} (restante): Dados dos tensores armazenados de forma contígua.
-\end{enumerate}
+\par
+O cabeçalho tem um tamanho de 8 bytes, que corresponde a um inteiro de 64 bits no formato \textit{little-endian}, que indica o tamanho do cabeçalho JSON.
+\par
+O cabeçalho JSON, por sua vez, possui um tamanho variável e contém metadados que descrevem cada tensor, incluindo o nome, o tipo de dados (\textit{dtype}), as dimensões e os \textit{offsets} no \textit{payload}.
+\par
+O \textit{payload} binário armazena os dados dos tensores de forma contígua.
 
-A extração e análise do cabeçalho JSON revelou que os pesos estão armazenados no formato \textbf{BF16} (\textit{Brain Floating Point 16}), uma representação numérica de 16 bits desenvolvida pelo Google para aplicações de \textit{machine learning}.
+
+A extração e análise do cabeçalho JSON revelou que os pesos estão armazenados no formato BF16 (\textit{Brain Floating Point 16}), uma representação numérica de 16 bits desenvolvida pelo Google para aplicações de \textit{machine learning}.
 
 \subsection{Análise do Formato BF16}
 
-Ao contrário de inteiros de 16 bits, onde a distribuição de bits pode ser relativamente uniforme, o formato BF16 possui uma semântica específica que influencia diretamente as suas propriedades estatísticas:
-
-\begin{itemize}
-    \item \textbf{1 bit de Sinal ($S$)}: Indica se o valor é positivo ou negativo;
-    \item \textbf{8 bits de Expoente ($E$)}: Representam a magnitude do valor numa escala logarítmica;
-    \item \textbf{7 bits de Mantissa ($M$)}: Representam a precisão fracionária do valor.
-\end{itemize}
+Ao contrário de inteiros de 16 bits, onde a distribuição de bits pode ser relativamente uniforme, o formato BF16 possui uma semântica específica que influencia diretamente as suas propriedades estatísticas.
+\par
+O primeiro bit é o \textbf{bit de sinal ($S$)}, que indica se o valor é positivo ou negativo.
+\par
+Seguem-se 8 bits de \textbf{expoente ($E$)}, que representam a magnitude do valor numa escala logarítmica.
+\par
+Os restantes 7 bits correspondem à \textbf{mantissa ($M$)}, que define a precisão fracionária do valor.
+\par
 
 Numa organização \textit{little-endian}, o byte menos significativo (LSB) contém os 7 bits da mantissa mais o bit menos significativo do expoente, enquanto o byte mais significativo (MSB) contém o bit de sinal e os 7 bits mais significativos do expoente.
 
@@ -151,41 +155,27 @@ Esta estrutura sugere a existência de correlações não-lineares e localizadas
 
 \subsection{Limites Teóricos: Entropia de Shannon}
 
-O limite teórico fundamental para a compressão sem perdas é dado pela \textbf{Entropia de Shannon}. Considerando o ficheiro como uma fonte de memória nula $X$ que gera símbolos $x \in \{0, \dots, 255\}$, a entropia de ordem-0 é definida por:
-
-\begin{equation}
-    H(X) = - \sum_{i=0}^{255} P(x_i) \log_2 P(x_i) \quad \text{[bits/símbolo]}
-    \label{eq:shannon}
-\end{equation}
-
+O limite teórico fundamental para a compressão sem perdas é dado pela \textbf{Entropia de Shannon}. Considerando o ficheiro como uma fonte de memória nula $X$ que gera símbolos $x \in \{0, \dots, 255\}$, a entropia de ordem-0 é definida por
+\(
+H(X) = - \sum_{i=0}^{255} P(x_i) \log_2 P(x_i) \quad \text{[bits/símbolo]},
+\)
 onde $P(x_i)$ representa a probabilidade de ocorrência do símbolo $x_i$.
 
 \subsubsection{Análise Global do Payload}
+Aplicando esta fórmula à totalidade do \textit{payload} binário (excluindo o cabeçalho), obteve-se um valor de entropia de ordem-0 global de \textbf{$\boldsymbol{H(X) \approx 6.22}$ bits/byte}.
 
-Aplicando a Equação~\ref{eq:shannon} à totalidade do \textit{payload} binário (excluindo o cabeçalho), obteve-se:
-
-\begin{tcolorbox}[colback=blue!5!white, colframe=blue!75!black, title=Entropia de Ordem-0 Global]
-\centering
-$H(X) \approx 6.22$ bits/byte
-\end{tcolorbox}
 
 Este valor indica que, ignorando qualquer dependência entre bytes, a compressão máxima teórica seria de apenas $\sim 22\%$ (redução de 8 para 6.22 bits por byte). Trata-se de um resultado modesto que motivou a investigação de dependências inter-simbólicas.
 
 \subsubsection{Análise de Correlação Sequencial}
 
-Para investigar a existência de dependências sequenciais, calculou-se a \textbf{Entropia Condicional} de primeira ordem, que mede a incerteza de um símbolo $X_n$ dado o conhecimento do símbolo anterior $X_{n-1}$:
-
-\begin{equation}
+Para investigar a existência de dependências sequenciais, calculou-se a \textbf{Entropia Condicional} de primeira ordem, que mede a incerteza de um símbolo $X_n$ dado o conhecimento do símbolo anterior $X_{n-1}$ com a seguinte fórmula   
+\(
     H(X_n|X_{n-1}) = - \sum_{y \in \mathcal{X}} P(y) \sum_{x \in \mathcal{X}} P(x|y) \log_2 P(x|y)
     \label{eq:conditional}
-\end{equation}
+\)
 
-O resultado experimental obtido foi:
-
-\begin{tcolorbox}[colback=green!5!white, colframe=green!75!black, title=Entropia Condicional de Primeira Ordem]
-\centering
-$H(X_n | X_{n-1}) \approx 5.36$ bits/byte
-\end{tcolorbox}
+O resultado experimental obtido indica uma entropia condicional de primeira ordem de \textbf{$\boldsymbol{H(X_n \mid X_{n-1}) \approx 5.36}$ bits/byte}.
 
 O facto de $H(X|Y) < H(X)$ confirma a existência de correlação inter-simbólica (pelo teorema do condicionamento, que afirma que condicionar nunca aumenta a entropia). Contudo, o valor de 5.36 bits/byte permanece relativamente elevado, sugerindo que a correlação sequencial simples não é suficiente para explicar toda a redundância presente nos dados.
 
@@ -193,13 +183,12 @@ A nossa hipótese explicativa é que a natureza intercalada dos dados BF16 (MSB 
 
 \subsection{Análise Estrutural Diferenciada: \textit{Byte-Splitting}}
 
-Para validar a hipótese de que a entropia está distribuída de forma desigual entre os componentes do formato BF16, procedeu-se à separação do fluxo de dados em dois canais distintos:
-
-\begin{itemize}
-    \item \textbf{Canal MSB}: Bytes nas posições ímpares (1, 3, 5, ...), contendo predominantemente o expoente e o bit de sinal;
-    \item \textbf{Canal LSB}: Bytes nas posições pares (0, 2, 4, ...), contendo predominantemente a mantissa.
-\end{itemize}
-
+Para validar a hipótese de que a entropia está distribuída de forma desigual entre os componentes do formato BF16, procedeu-se à separação do fluxo de dados em dois canais distintos.
+\par
+O primeiro canal, denominado \textbf{Canal MSB}, corresponde aos bytes nas posições ímpares (1, 3, 5, ...), contendo predominantemente o expoente e o bit de sinal.
+\par
+O segundo canal, denominado \textbf{Canal LSB}, corresponde aos bytes nas posições pares (0, 2, 4, ...), contendo predominantemente a mantissa.
+\par
 As entropias de ordem-0 foram recalculadas individualmente para cada canal, revelando uma disparidade notável:
 
 \begin{table}[H]
@@ -239,26 +228,23 @@ Os histogramas de frequência apresentados nas Figuras~\ref{fig:hist_msb} e~\ref
 \subsubsection{Interpretação Física dos Resultados}
 
 A diferença drástica entre as entropias dos dois canais tem uma explicação física fundamentada na natureza dos pesos de redes neuronais:
-
-\begin{itemize}
-    \item \textbf{Canal MSB (Expoente)}: Os pesos de LLMs são tipicamente valores pequenos, centrados em torno de zero, resultantes de técnicas de normalização (\textit{layer normalization}, \textit{weight decay}). Consequentemente, os expoentes concentram-se num intervalo reduzido de valores, gerando uma distribuição altamente previsível.
-    
-    \item \textbf{Canal LSB (Mantissa)}: A mantissa representa a precisão fracionária do peso. Para valores pequenos e normalizados, estes bits comportam-se como "ruído de quantização", com distribuição aproximadamente uniforme.
-\end{itemize}
+\par
+O \textbf{Canal MSB (Expoente)} contém os expoentes dos pesos. Os pesos de LLMs são tipicamente valores pequenos, centrados em torno de zero, resultantes de técnicas de normalização (\textit{layer normalization}, \textit{weight decay}). Consequentemente, os expoentes concentram-se num intervalo reduzido de valores, gerando uma distribuição altamente previsível.
+\par
+O \textbf{Canal LSB (Mantissa)} corresponde à mantissa, que representa a precisão fracionária do peso. Para valores pequenos e normalizados, estes bits comportam-se como "ruído de quantização", apresentando uma distribuição aproximadamente uniforme.
 
 \subsection{Síntese e Estratégia de Compressão}
 
 A análise realizada permite formular a seguinte observação crucial: a média das entropias separadas é $(2.71 + 7.96)/2 \approx 5.34$ bits/byte, um valor virtualmente idêntico à Entropia Condicional global (5.36 bits/byte). Isto sugere que a "memória"\ da fonte detetada na análise global resulta, na realidade, da estrutura interna do formato BF16 e não de correlação sequencial entre pesos adjacentes.
 
-Com base nestes fundamentos teóricos e experimentais, definiu-se a seguinte estratégia de compressão em três etapas:
+Com base nestes fundamentos teóricos e experimentais, definiu-se a seguinte estratégia de compressão em três etapas.
+\par
+A primeira etapa é o \textbf{pré-processamento (\textit{Split})}, que consiste em separar o fluxo de entrada em dois canais independentes (MSB e LSB), isolando a estrutura do ruído.
+\par
+A segunda etapa envolve o \textbf{Canal MSB}. Neste canal, aplica-se codificação entrópica agressiva (Huffman ou Aritmética), explorando a baixa entropia ($H \approx 2.71$) para atingir rácios de compressão próximos de 3:1.
+\par
+A terceira etapa foca-se no \textbf{Canal LSB}. Dado que $H \approx 8$ bits/byte, qualquer tentativa de compressão entrópica resultaria em expansão. Assim, aplica-se apenas compressão oportunística (RLE para sequências de zeros) ou armazenamento direto.
 
-\begin{enumerate}
-    \item \textbf{Pré-processamento (\textit{Split})}: Separar o fluxo de entrada em dois canais independentes (MSB e LSB), isolando a estrutura do ruído;
-    
-    \item \textbf{Canal MSB}: Aplicar codificação entrópica agressiva (Huffman ou Aritmética), explorando a baixa entropia ($H \approx 2.71$) para atingir rácios de compressão próximos de 3:1 neste canal;
-    
-    \item \textbf{Canal LSB}: Dado que $H \approx 8$ bits/byte, qualquer tentativa de compressão entrópica resultaria em expansão. Aplicar apenas compressão oportunística (RLE para sequências de zeros) ou armazenamento direto.
-\end{enumerate}
 
 % ----------------------------------------------------------------------------------
 % SECÇÃO 3: BENCHMARKING DE COMPRESSORES EXISTENTES
@@ -320,22 +306,21 @@ O \textbf{ZSTD} destacou-se claramente em velocidade, com apenas 2 segundos para
 O \textbf{GZIP -9}, apesar de um rácio de compressão ligeiramente superior ao GZIP -1, requer quase 3 vezes mais tempo de compressão (76 s vs. 28 s).
 
 \subsubsection{Consumo de Memória}
-O consumo de memória variou significativamente entre os compressores:
-\begin{itemize}
-    \item \textbf{GZIP}: Muito eficiente (1.9 MB), adequado para sistemas com recursos limitados;
-    \item \textbf{BZIP2} e \textbf{ZSTD}: Consumo moderado (7.8--15 MB).
-\end{itemize}
+
+O consumo de memória variou significativamente entre os compressores. 
+\par
+O \textbf{GZIP} mostrou-se muito eficiente, utilizando apenas 1.9 MB, sendo adequado para sistemas com recursos limitados. Por outro lado, o \textbf{BZIP2} e o \textbf{ZSTD} apresentaram consumo moderado, entre 7.8 e 15 MB.
 
 \subsection{Conclusões do Benchmarking}
 
-Os resultados permitem identificar dois pontos de operação de referência:
+Os resultados permitem identificar dois pontos de operação de referência. 
+\par
+O primeiro ponto é a \textbf{máxima compressão}, obtida com BZIP2, que atingiu um rácio de 1.44:1, com tempo aceitável de 66 segundos e consumo moderado de RAM. 
+\par
+O segundo ponto é a \textbf{máxima velocidade}, conseguido com ZSTD, que apresentou um rácio de 1.28:1, tempo excelente de 2 segundos e baixo consumo de RAM.
 
-\begin{enumerate}
-    \item \textbf{Máxima compressão}: BZIP2 com rácio 1.44:1, tempo aceitável (66 s) e consumo moderado de RAM;
-    \item \textbf{Máxima velocidade}: ZSTD com rácio 1.28:1, tempo excelente (2 s) e consumo baixo de RAM.
-\end{enumerate}
+O objetivo do codec a desenvolver será \textbf{superar o BZIP2 em taxa de compressão}, mantendo tempos competitivos com o ZSTD.
 
-O objetivo do codec a desenvolver será \textbf{superar o BZIP2 em taxa de compressão} mantendo tempos competitivos com o ZSTD.
 
 
 % ----------------------------------------------------------------------------------
@@ -347,14 +332,14 @@ O objetivo do codec a desenvolver será \textbf{superar o BZIP2 em taxa de compr
 Esta secção descreve em detalhe a arquitetura e implementação do codec desenvolvido, desde as decisões de engenharia de alto nível até aos algoritmos específicos utilizados em cada módulo.
 
 \subsection{Arquitetura Geral}
-
-O codec implementa uma arquitetura \textit{split-stream} composta por três módulos principais:
-
-\begin{enumerate}
-    \item \textbf{Módulo de Pré-processamento (\textit{Splitter})}: Separa o fluxo de entrada em dois canais independentes;
-    \item \textbf{Módulo de Compressão MSB}: Aplica codificação entrópica ao canal de expoentes;
-    \item \textbf{Módulo de Compressão LSB}: Aplica compressão oportunística ao canal de mantissas.
-\end{enumerate}
+O codec implementa uma arquitetura \textit{split-stream} composta por três módulos principais.
+\par
+O primeiro é o \textbf{Módulo de Pré-processamento (\textit{Splitter})}, responsável por separar o fluxo de entrada em dois canais independentes.
+\par
+O segundo módulo é o \textbf{Módulo de Compressão MSB}, que aplica codificação entrópica ao canal de expoentes.
+\par
+O terceiro módulo é o \textbf{Módulo de Compressão LSB}, encarregado de aplicar compressão oportunística ao canal de mantissas.
+\par
 
 O processamento é realizado em blocos de 1 MB para controlar o consumo de memória e permitir a paralelização futura.
 
@@ -393,9 +378,9 @@ A literatura de compressão de dados sugere frequentemente o uso de codificaçã
 
 \paragraph{Preditor Linear (Delta)}
 A primeira abordagem utilizou um preditor de primeira ordem clássico:
-\begin{equation}
+\(
     r_n = (x_n - x_{n-1}) \mod 256
-\end{equation}
+\)
 
 \textbf{Resultado}: A entropia \textbf{aumentou} de 2.70 para 3.28 bits/byte (ganho negativo de -0.58 bits).
 
@@ -403,9 +388,9 @@ A primeira abordagem utilizou um preditor de primeira ordem clássico:
 
 \paragraph{Preditor XOR}
 Para mitigar o problema do bit de sinal, testou-se um preditor baseado em XOR:
-\begin{equation}
+\(
     r_n = x_n \oplus x_{n-1}
-\end{equation}
+\)
 
 \textbf{Resultado}: Entropia de 3.11 bits/byte, ainda superior à original.
 
@@ -420,23 +405,26 @@ Consequentemente, optou-se por \textbf{codificar diretamente os valores brutos} 
 Foram implementados e comparados dois algoritmos de codificação entrópica:
 
 \paragraph{Codificação de Huffman (Estática)}
-Implementação clássica de codificação de Huffman, uma técnica de codificação entrópica que oferece compressão eficiente com tabela de códigos pré-calculada. As principais características da implementação são:
-
-\begin{itemize}
-    \item \textbf{Look-Up Table (LUT)}: Tabela de códigos pré-calculada para codificação eficiente em tempo $O(1)$;
-    \item \textbf{Tabela de frequências}: Cada bloco inclui a tabela de frequências (256 × 4 bytes = 1 KB), permitindo a reconstrução da árvore de Huffman;
-    \item \textbf{Buffer de 64 bits}: Acumulação eficiente de bits, emitindo bytes completos para o fluxo de saída à medida que ficam disponíveis;
-    \item \textbf{Descodificação independente}: Cada bloco pode ser descodificado independentemente dos restantes.
-\end{itemize}
+A implementação segue o método clássico de codificação de Huffman, uma técnica entrópica que oferece compressão eficiente com tabela de códigos pré-calculada.  
+\par
+Para codificação rápida, utiliza-se uma \textbf{Look-Up Table (LUT)}, permitindo acesso em tempo $O(1)$.  
+\par
+Cada bloco inclui uma \textbf{tabela de frequências} (256 × 4 bytes = 1 KB), necessária para reconstruir a árvore de Huffman.  
+\par
+Um \textbf{buffer de 64 bits} acumula os bits e emite bytes completos à medida que ficam disponíveis, otimizando o fluxo de saída.  
+\par
+Além disso, cada bloco é projetado para \textbf{descodificação independente}, podendo ser decodificado sem depender dos restantes blocos.
 
 \paragraph{Codificação Aritmética}
-Implementação de codificação aritmética, uma técnica de codificação entrópica que oferece compressão próxima da entropia teórica. As principais características da implementação são:
+A codificação aritmética é uma técnica entrópica que aproxima a compressão da entropia teórica.  
+\par
+Utiliza aritmética de 32 bits com intervalos $[low, high]$ normalizados, garantindo precisão durante o processamento.  
+\par
+Um \textbf{buffer de 64 bits} que acumula os bits de forma eficiente, realizando \textit{flush} em lotes para minimizar operações de I/O.  
+\par
+A implementação também gere os \textbf{pending bits}, permitindo lidar corretamente com situações de \textit{underflow} durante a renormalização.
+\par
 
-\begin{itemize}
-    \item \textbf{Precisão}: Utiliza aritmética de 32 bits com intervalos $[low, high]$ normalizados;
-    \item \textbf{Buffer de 64 bits}: Acumulação eficiente de bits com \textit{flush} em lotes para minimizar operações de I/O;
-    \item \textbf{Pending bits}: Gestão de bits pendentes para tratar situações de \textit{underflow} durante a renormalização.
-\end{itemize}
 
 A Tabela~\ref{tab:entropy_bench} compara o desempenho dos dois algoritmos implementados:
 
@@ -462,25 +450,27 @@ O canal LSB, com entropia de 7.96 bits/byte, apresenta características de ruíd
 
 \subsubsection{Modo FAST: Armazenamento Direto (Raw)}
 
-No modo FAST, optou-se por uma estratégia de armazenamento direto para o canal LSB:
-
-\begin{itemize}
-    \item A entropia do canal LSB ($\approx 7.96$ bits/byte) está muito próxima do máximo teórico de 8 bits/byte;
-    \item Qualquer algoritmo de compressão entrópica introduziria \textit{overhead} de metadados (tabelas de frequência, marcadores) que anularia eventuais ganhos;
-    \item A cópia direta (\textit{Raw}) é computacionalmente eficiente e não introduz latência adicional.
-\end{itemize}
+No modo FAST, optou-se por uma estratégia de armazenamento direto para o canal LSB.
+\par
+A entropia do canal LSB ($\approx 7.96$ bits/byte) está muito próxima do máximo teórico de 8 bits/byte.  
+\par
+Qualquer algoritmo de compressão entrópica introduziria \textit{overhead} de metadados, como tabelas de frequência ou marcadores, que anularia eventuais ganhos.  
+\par
+A cópia direta (\textit{Raw}) é computacionalmente eficiente e não adiciona latência significativa ao processamento.
+\par
 
 \textbf{Decisão de Engenharia}: No modo FAST, os dados do canal LSB são copiados diretamente para o ficheiro comprimido sem qualquer transformação. Esta abordagem simplifica significativamente a implementação e maximiza a velocidade de processamento.
 
 \subsubsection{Modo BEST: Codificação Aritmética}
 
-No modo BEST, o canal LSB é também comprimido utilizando codificação aritmética, apesar da sua entropia elevada. Esta decisão justifica-se por:
-
-\begin{itemize}
-    \item Embora os ganhos sejam marginais, a codificação aritmética não expande os dados significativamente mesmo para fontes de alta entropia;
-    \item O processamento paralelo (MSB e LSB em \textit{threads} separadas) mitiga o custo computacional adicional;
-    \item Permite obter a taxa de compressão máxima possível para utilizadores que privilegiam o tamanho sobre a velocidade.
-\end{itemize}
+No modo BEST, o canal LSB é também comprimido utilizando codificação aritmética, apesar da sua entropia elevada.  
+\par
+Embora os ganhos sejam marginais, a codificação aritmética não expande os dados significativamente, mesmo para fontes de alta entropia.  
+\par
+O processamento paralelo, com MSB e LSB em \textit{threads} separadas, mitiga o custo computacional adicional.  
+\par
+Esta abordagem permite obter a taxa de compressão máxima possível, adequada para utilizadores que privilegiam o tamanho sobre a velocidade.
+\par
 
 A Tabela~\ref{tab:best_comparison} compara o desempenho entre a codificação aritmética apenas no MSB (com LSB \textit{raw}) e a codificação aritmética em ambos os canais:
 
@@ -506,28 +496,22 @@ Esta configuração é recomendada para cenários onde o espaço de armazenament
 
 \subsection{Modos de Operação}
 
-Para satisfazer o requisito de múltiplos pontos de operação, o codec oferece dois modos:
-
-\begin{tcolorbox}[colback=yellow!10!white, colframe=yellow!75!black, title=Modos de Operação]
-\begin{itemize}
-    \item \textbf{Modo FAST}: Huffman com LUT (MSB) + Raw (LSB) \\
-    \textit{Otimizado para velocidade de codificação e descodificação}
-    
-    \item \textbf{Modo BEST}: Aritmética (MSB) + Aritmética (LSB) em paralelo \\
-    \textit{Maximiza a taxa de compressão}
-\end{itemize}
-\end{tcolorbox}
+Para satisfazer o requisito de múltiplos pontos de operação, o codec oferece dois modos distintos.
+\par
+O \textbf{modo FAST} combina codificação de Huffman com LUT no canal MSB e armazenamento direto (\textit{Raw}) no canal LSB. Este modo é otimizado para maior velocidade de codificação e descodificação.
+\par
+O \textbf{modo BEST} utiliza codificação aritmética tanto no canal MSB como no canal LSB, executada em paralelo. Este modo tem como objetivo maximizar a taxa de compressão.
+\par
 
 No modo BEST, a compressão dos canais MSB e LSB é executada em paralelo utilizando \texttt{std::async}, permitindo explorar múltiplos núcleos do processador e mitigando o custo computacional adicional da codificação aritmética.
 
 \subsection{Gestão de Memória}
 
-O codec foi desenhado para operar com consumo de memória controlado:
-
-\begin{itemize}
-    \item \textbf{Processamento por blocos}: Cada bloco de 1 MB é processado independentemente, evitando a necessidade de carregar o ficheiro completo em memória;
-    \item \textbf{Buffers reutilizáveis}: Os \textit{buffers} de entrada/saída são alocados uma única vez e reutilizados para todos os blocos.
-\end{itemize}
+O codec foi desenhado para operar com consumo de memória controlado.
+\par
+O processamento é feito por blocos de 1 MB, processados independentemente, evitando a necessidade de carregar o ficheiro completo na memória.
+\par
+Os \textit{buffers} de entrada e saída são alocados apenas uma vez e reutilizados para todos os blocos, otimizando o uso de memória.
 
 \subsubsection{Otimização do Tamanho de Bloco}
 
@@ -535,7 +519,7 @@ A escolha do tamanho de bloco resulta de um estudo experimental que avaliou o co
 
 \begin{table}[H]
     \centering
-    \caption{Impacto do Tamanho de Bloco no Desempenho do Codec}
+    \caption{Impacto do Tamanho dos Blocos no Desempenho do Codec}
     \label{tab:block_size}
     \begin{tabular}{lcccccc}
         \toprule
@@ -552,14 +536,16 @@ A escolha do tamanho de bloco resulta de um estudo experimental que avaliou o co
     \end{tabular}
 \end{table}
 
-A análise dos resultados revela que:
-
-\begin{itemize}
-    \item \textbf{Taxa de compressão}: Blocos maiores permitem estatísticas mais representativas para a codificação entrópica, melhorando o rácio de compressão. A diferença entre 64 KB e 1 MB é de aproximadamente 28 MB (4.2\%) no modo BEST;
-    \item \textbf{Tempo de processamento}: Blocos maiores reduzem o \textit{overhead} por bloco (tabelas de frequências, metadados), resultando em tempos globalmente inferiores;
-    \item \textbf{Consumo de RAM}: O aumento de 3.9 MB para 6.6 MB é negligenciável para sistemas modernos;
-    \item \textbf{Retornos decrescentes}: A curva de melhoria estabiliza a partir de 512 KB, sugerindo que blocos superiores a 1 MB teriam ganhos marginais.
-\end{itemize}
+A análise dos resultados revela vários pontos importantes.
+\par
+Em termos de \textbf{taxa de compressão}, blocos maiores permitem obter estatísticas mais representativas para a codificação entrópica, melhorando o rácio de compressão. Por exemplo, a diferença entre blocos de 64 KB e 1 MB é de aproximadamente 28 MB (4.2\%) no modo BEST.
+\par
+Quanto ao \textbf{tempo de processamento}, blocos maiores reduzem o \textit{overhead} por bloco, como tabelas de frequências e metadados, resultando em tempos globais inferiores.
+\par
+O \textbf{consumo de RAM} aumenta de 3.9 MB para 6.6 MB, mas este incremento é negligenciável para sistemas modernos.
+\par
+Finalmente, observam-se \textbf{retornos decrescentes}: a curva de melhoria estabiliza a partir de 512 KB, sugerindo que blocos superiores a 1 MB trariam apenas ganhos marginais.
+\par
 
 Com base nesta análise, definiu-se \textbf{1 MB como o tamanho de bloco predefinido}, oferecendo o melhor compromisso entre compressão máxima e consumo de memória aceitável.
 % ----------------------------------------------------------------------------------
@@ -697,18 +683,15 @@ A escalabilidade da solução foi comprovada pela consistência dos resultados e
 
 Este trabalho desenvolveu um codec especializado para a compressão sem perdas de pesos de modelos de linguagem armazenados no formato SafeTensors/BF16. A abordagem metodológica baseou-se numa análise profunda da estrutura estatística dos dados, culminando numa arquitetura \textit{split-stream} que processa separadamente os bytes de expoente/sinal (MSB) e mantissa (LSB).
 
-\subsection{Principais Contribuições}
+\subsection{Principais Resultados}
 
-\begin{enumerate}
-    \item \textbf{Caracterização da Fonte}: Demonstrou-se que a entropia do formato BF16 está distribuída de forma altamente desigual entre os seus componentes (2.71 vs. 7.96 bits/byte), fundamentando a estratégia de separação de canais.
-    
-    \item \textbf{Superação dos Benchmarks}: O codec desenvolvido atingiu um rácio de compressão de 1:50:1, superando todos os compressores de uso geral testados, incluindo o BZIP2 (1.44:1).
-    
-    \item \textbf{Eficiência Computacional}: O decoder Huffman otimizado com LUT de 12 bits atinge \textit{throughput} elevado, permitindo ciclos completos de codificação + descodificação em tempos competitivos para ficheiros de grande dimensão.
-    
-    \item \textbf{Múltiplos Pontos de Operação}: A disponibilização de dois modos (Fast e Best) permite ao utilizador escolher o compromisso ideal para o seu caso de uso.
-\end{enumerate}
-
+Um dos principais resultados foi a \textbf{caracterização da fonte}. Demonstrou-se que a entropia do formato BF16 está distribuída de forma altamente desigual entre os seus componentes, com valores de 2.71 e 7.96 bits/byte, respetivamente, o que fundamenta a estratégia de separação de canais adotada.
+\par
+Outro resultado relevante foi a \textbf{superação dos benchmarks}. O codec desenvolvido atingiu um rácio de compressão de 1.50:1, superando todos os compressores de uso geral testados, incluindo o BZIP2, que apresentou um rácio de 1.44:1.
+\par
+No que diz respeito à \textbf{eficiência computacional}, o decoder Huffman otimizado com uma LUT de 12 bits atingiu um \textit{throughput} elevado. Esta abordagem permite ciclos completos de codificação e descodificação em tempos competitivos, mesmo para ficheiros de grande dimensão.
+\par
+Por fim, destaca-se a existência de \textbf{múltiplos pontos de operação}. A disponibilização dos dois modos distintos, Fast e Best, permite ao utilizador escolher o compromisso mais adequado entre taxa de compressão e velocidade, de acordo com o seu caso de uso.
 
 \subsection{Considerações Finais}
 

@@ -15,12 +15,11 @@
 #include <future>
 
 // Configurações
-const size_t BLOCK_SIZE = 1024 * 1024;
+const size_t BLOCK_SIZE = 1024 * 1024; // 1 MB por bloco
 
 // ==========================================
-// MÓDULO 1: HUFFMAN (modo Fast)atual
+// MÓDULO 1: HUFFMAN (modo Fast)
 // ==========================================
-// (Mantive a tua versão LUT que já é ótima: ~3.0s, ~1.49:1)
 struct Node {
     uint8_t symbol;
     uint64_t freq;
@@ -37,41 +36,52 @@ class HuffmanCodec {
     Code table[256];
 public:
     std::vector<uint32_t> frequencies;
+    // array de frequências para 256 símbolos, todos iniciados em 0
     HuffmanCodec() : frequencies(256, 0) {}
 
     void build(const std::vector<uint8_t>& data) {
+        // para cada byte em data, incrementar a frequência correspondente
         std::fill(frequencies.begin(), frequencies.end(), 0);
         for (uint8_t b : data) frequencies[b]++;
         
+        // reordena os simbolos por orden de ocorrência e constroi a árvore de Huffman
         std::priority_queue<std::shared_ptr<Node>, std::vector<std::shared_ptr<Node>>, CompareNode> pq;
         for (int i = 0; i < 256; ++i) if (frequencies[i] > 0) pq.push(std::make_shared<Node>((uint8_t)i, frequencies[i]));
         
         if (pq.empty()) return;
         if (pq.size() == 1) { table[pq.top()->symbol] = {0, 1}; return; }
         
+        // construir a árvore
         while (pq.size() > 1) {
             auto l = pq.top(); pq.pop(); auto r = pq.top(); pq.pop();
             pq.push(std::make_shared<Node>(l->freq + r->freq, l, r));
         }
+        // contém só a raiz da árvore
         gen_lut(pq.top(), 0, 0);
     }
 
     std::vector<uint8_t> compress(const std::vector<uint8_t>& data) {
         std::vector<uint8_t> out; out.reserve(data.size());
         for (uint32_t f : frequencies) {
+            // escrever frequências como 4 bytes little-endian
             out.push_back(f & 0xFF); out.push_back((f >> 8) & 0xFF);
             out.push_back((f >> 16) & 0xFF); out.push_back((f >> 24) & 0xFF);
         }
+        // bc = bit counter do buf
         uint64_t buf = 0; int bc = 0;
         for (uint8_t s : data) {
+            // obtem o codigo e comprimento do simbolo
             Code c = table[s];
+            // concatena no buffer (101 + 101 = 10101)
             buf = (buf << c.len) | c.bits; bc += c.len;
+            // escrever bytes completos no output file
             while (bc >= 8) { bc -= 8; out.push_back((buf >> bc) & 0xFF); }
         }
         if (bc > 0) out.push_back((buf << (8 - bc)) & 0xFF);
         return out;
     }
 private:
+    // gera códigos recursivamente para os nós folha da árvore
     void gen_lut(std::shared_ptr<Node> n, uint32_t c, uint8_t l) {
         if (!n) return;
         if (!n->left && !n->right) { table[n->symbol] = {c, l}; return; }
@@ -80,13 +90,8 @@ private:
 };
 
 // ==========================================
-// MÓDULO AUXILIAR: ARITMÉTICA ULTRA-OTIMIZADA (Modo Best)
+// MÓDULO AUXILIAR: ARITMÉTICA (Modo Best)
 // ==========================================
-// Otimizações principais:
-// 1. Buffer de 64 bits com flush em lotes
-// 2. Pending bits acumulados e escritos em batches
-// 3. Renormalização com menos branches usando __builtin_clz
-// 4. Tabela de lookup para cumulativas pré-calculadas
 
 class ArithmeticEncoder {
     static constexpr uint32_t MAX_VAL = 0xFFFFFFFF;
@@ -305,7 +310,7 @@ int main(int argc, char* argv[]) {
             lsb_final = std::move(lsb);
         }
 
-        // --- Empacotar ---
+        // Empacotar
         uint32_t sz_m = msb_enc.size(), sz_l = lsb_final.size();
         out.write((char*)&sz_m, 4); out.write((char*)&sz_l, 4);
         out.write((char*)msb_enc.data(), sz_m); out.write((char*)lsb_final.data(), sz_l);

@@ -389,7 +389,7 @@ int main(int argc, char* argv[]) {
             hd.decompress(std::vector<uint8_t>(msb_packet.begin() + 1024, msb_packet.end()), msb, num_pairs);
         }
 
-        // --- Merge otimizado (LSB, MSB, LSB, MSB...) ---
+        // --- Merge (LSB, MSB, LSB, MSB...) ---
         std::vector<char> buffer(num_pairs * 2);
         char* buf_ptr = buffer.data();
         const uint8_t* lsb_ptr = lsb_decoded.data();

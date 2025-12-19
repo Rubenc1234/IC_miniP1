@@ -24,7 +24,7 @@ for INPUT_FILE in data/model*.safetensors; do
     # Define o nome base sem a extensão .safetensors (ex: model, model_1)
     BASENAME="${FILENAME%.*}"
 
-    echo "▶️ Processando: $FILENAME"
+    echo "Processando: $FILENAME"
     echo "--------------------------------------------------------"
     
     # --- Teste de Codificação/Decodificação RÁPIDA (fast) ---
@@ -124,5 +124,5 @@ for INPUT_FILE in data/model*.safetensors; do
 
 done
 
-echo "✅ Todos os testes foram concluídos."
+echo "Todos os testes foram concluídos."
 echo "Os arquivos de log estão no diretório: $LOGS_DIR"
